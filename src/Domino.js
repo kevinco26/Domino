@@ -9,7 +9,6 @@ class Domino extends Component {
             pieces: [],
             board: [],
             currentPlayingPiece: {}
-            //board: [{ top: { value: 6, open: true }, bottom: { value: 6, open: false } }, { top: { value: 6, open: false }, bottom: { value: 2, open: true } }],
         };
     }
     componentDidMount() {
@@ -17,19 +16,24 @@ class Domino extends Component {
         this.props.socket.on("RefreshBoard", (data) => {
             this.removeUserPiece(data.pieceIntroduced);
             this.setState({ board: data.board });
+            console.log(data.board);
         });
     }
 
     removeUserPiece(piece) {
-        var index = this.state.pieces.findIndex(p => p.top.value == piece.top.value && p.bottom.value == piece.bottom.value);
+        var index = this.state.pieces.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value));
         if (index !== -1) {
             this.state.pieces.splice(index, 1);
+        }
+        if (this.state.pieces.length == 0) {
+            alert("You and your teammate won!!!. Your total score is your opponent's score: ")
         }
     }
     render() {
         return (
             <div className="App">
-                Hello and welcome to the Domino Board
+                Hello and welcome to the Domino Board.
+                You are in team: {this.props.teams[this.props.socket.id]}
                 <br></br>
                 {this.state.pieces.length == 0 && <button onClick={this.getPieces}>Click to get pieces</button>}
                 <br></br>
@@ -39,7 +43,7 @@ class Domino extends Component {
                 <div style={{ marginTop: "50px" }}>
                     The board: <br></br> <br></br>
                     {
-                        this.state.board.map((piece) => <button style={{ marginRight: "1px", marginLeft: "1px" }} disabled={true}><button onClick={this.playPieceOnBoard.bind(this, piece.top)}>{piece.top.value}</button> | <button onClick={this.playPieceOnBoard.bind(this, piece.bottom)}>{piece.bottom.value}</button></button>)
+                        this.state.board.map((piece) => <button style={{ marginRight: "1px", marginLeft: "1px" }} disabled={true}><button onClick={this.playPieceOnBoard.bind(this, piece.top, "left")}>{piece.top.value}</button> | <button onClick={this.playPieceOnBoard.bind(this, piece.bottom, "right")}>{piece.bottom.value}</button></button>)
                     }
                 </div>
             </div >
@@ -72,8 +76,9 @@ class Domino extends Component {
     }
 
     // halfPiece since we are only passing either the top or the bottom and verifying that the half piece the user clicked is open
-    playPieceOnBoard = (halfPiece) => {
-        console.log("hello");
+    playPieceOnBoard = (halfPiece, direction) => {
+        console.log("Direction: " + direction);
+        halfPiece.direction = direction;
         if (!halfPiece.open) {
             console.log("invalid place to put a piece");
         }

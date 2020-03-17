@@ -13,18 +13,19 @@ class App extends Component {
     super();
     this.state = {
       isDomino: false,
+      teams: {}
     };
   }
   componentDidMount() {
     socket.emit("join", "cuarto1"); // maybe not the best place (What if refresh)
-    socket.on("BeginDomino", () => {
-      this.setState({ isDomino: true });
+    socket.on("BeginDomino", (data) => {
+      this.setState({ isDomino: true, teams: data.teams });
     });
   }
 
   render() {
-    if (this.state.isDomino) {
-      return <Domino socket={socket} />
+    if (this.state.isDomino && this.state.teams != {}) {
+      return <Domino socket={socket} teams={this.state.teams} />
     }
     return (
       <div className="App">

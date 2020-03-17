@@ -15,6 +15,7 @@ httpServer.listen(port, function () {
 
 var piecesToGive = []; // Maybe a better way of storing this.
 var board = []; // Maybe a better way of storing this.
+var teams = {}
 
 expressApp.use(function (req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
@@ -34,7 +35,7 @@ io.on("connection", socket => {
   socket.on('join', (room) => {
     var user = io.in(room).clients((err, clients) => {
       // If there are already 4 sockets in a room, do not let the new socket join.
-      if (clients.length > 3) {
+      if (clients.length > 3) { //(0,1,2,3)
         console.log("Sorry this room is full");
         // should throw
       }
@@ -51,8 +52,11 @@ io.on("connection", socket => {
             let updatedClients = clients;
             updatedClients.push(socket.id);
             CreateDominoPieces(updatedClients);
+            CreateTeams(updatedClients);
+            console.log(teams);
             io.to(socket.rooms[socketRoom]).emit('BeginDomino', {
-              message: "Let's Play! We aare 4 in the room already!"
+              message: "Let's Play! We are 4 in the room already!",
+              teams: teams
             });
           }
         });
@@ -60,11 +64,15 @@ io.on("connection", socket => {
     });
   });
 
+  // halfPiece is the part of the piece that we are playing with.
+  // si tenemos un 5|4, halfpiece nos va a decir si queremos jugar el 5 o el 4
   socket.on("PlayPiece", (piece, halfPiece) => {
     console.log("received piece:");
-    console.log(piece.top + " | " + piece.bottom);
+    console.log(piece.top.value + "|" + piece.bottom.value);
 
-    console.log("Desired to put it on: " + halfPiece);
+    // first time, halfPiece is null
+    if (halfPiece != null)
+      console.log("Desired to put it on: " + halfPiece.value);
 
     // need to figure out how to put it in the right array order maybe...?
     // If starting, push it at the beginning
@@ -74,30 +82,50 @@ io.on("connection", socket => {
       board.push(piece);
     }
     // if second piece is going to be played (board has 1 piece)
-    else if (board.length == 1) {
+    else {
       let placeToPutPiece = board.findIndex(boardPiece => (boardPiece.top.open == true && boardPiece.top.value == halfPiece.value)
         || (boardPiece.bottom.open == true && boardPiece.bottom.value == halfPiece.value));
-      if (board[0].top.value == halfPiece.value) {
-        // we need to put the new piece at the beginning. THe problem here is now if we need to switch top bottom or not.
-        // i.e Board has: 4 | 3. I have 0 | 4 so I chose 4(halfPiece). baord.top is halfpiece value so we go in.
-        // Now. If my piece 0 | 4 bottom's is == boards top then put it before.
-        // if my piece 4 | 0 top's is board's top. then put it before but invert so that we have 0 | 4.
-
-        //   piece.top.open = true;
-        //   board[placeToPutPiece].bottom.open = false;
-        //   board.push(piece);
-        // }
-        // else if the piece is at the bottom of the current board. then do the same thing.
-        // if my piece 0 | 4 top mtaches board's bottom then just push it.  else swith 4 | 0 then push.
+      if (piece.top.value == halfPiece.value) {
+        console.log(halfPiece.direction)
+        // this case is 6 | 6 on the board and i have 6 | 1
+        if (halfPiece.direction == "right") {
+          // I clicked on the left so I just need to put the 1 | 6 at the left of the board.
+          // I would have 1 | 6 - 6|6.. now the opens are 1 and 6... will figure that out later
+          board.push(piece);
+        }
+        else {
+          // I clicked on the right. so I need to invert the 1 |  6 so that its 6| 6 - 6 | 1
+          console.log("invert");
+          var tempTop = piece.top;
+          piece.top = piece.bottom;
+          piece.bottom = tempTop;
+          board.splice(0, 0, piece);
+        }
       }
-      else if (board[0].bottom.value == halfPiece.value) {
-
+      else if (piece.bottom.value == halfPiece.value) {
+        console.log(halfPiece.direction)
+        // this case is 6 | 6 on the board and i have 1|6
+        if (halfPiece.direction == "right") {
+          // I clicked on the right. so I need to invert the 1 |  6 so that its 6| 6 - 6 | 1
+          console.log("invert");
+          var tempTop = piece.top;
+          piece.top = piece.bottom;
+          piece.bottom = tempTop;
+          piece.bottom.open = true;
+          board.push(piece);
+        }
+        else {
+          // I clicked on the left so I just need to put the 1 | 6 at the left of the board.
+          // I would have 1 | 6 - 6|6.. now the opens are 1 and 6... will figure that out later
+          board.splice(0, 0, piece);
+        }
+        console.log("bottom!")
         // piece.top.open = true;
         // board[placeToPutPiece].top.open = false
         // board.splice(0, 0, piece);
       }
-    }
-    else {
+
+      SetOpenEndsOnBoard(board);
     }
     io.to(socket.rooms[socketRoom]).emit("RefreshBoard", {
       board: board,
@@ -106,6 +134,24 @@ io.on("connection", socket => {
   });
 });
 
+function CreateTeams(clients) {
+  let shuffledArray = shuffle(clients);
+  console.log(shuffledArray);
+  teams[shuffledArray[0]] = "Team 1";
+  teams[shuffledArray[1]] = "Team 1";
+  teams[shuffledArray[2]] = "Team 2";
+  teams[shuffledArray[3]] = "Team 2";
+}
+
+function SetOpenEndsOnBoard(board) {
+  board.forEach(piece => {
+    piece.top.open = false;
+    piece.bottom.open = false;
+  });
+  board[0].top.open = true;
+  board[board.length - 1].bottom.open = true;
+
+}
 function CreateDominoPieces(clients) {
   // create the pieces.
   let piecesDealt = ConstructInitialPiecesArray();
