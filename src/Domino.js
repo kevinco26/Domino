@@ -8,24 +8,33 @@ class Domino extends Component {
         this.state = {
             pieces: [],
             board: [],
-            currentPlayingPiece: {}
+            currentPlayingPiece: {},
+            nextPlayer: null
         };
     }
     componentDidMount() {
         // whenever we receive the refresh board event from server, update the local's board state
         this.props.socket.on("RefreshBoard", (data) => {
-            this.removeUserPiece(data.pieceIntroduced);
-            this.setState({ board: data.board });
+            console.log("Board was refreshed. State of the board is:")
             console.log(data.board);
+            console.log("Piece that got introduced was:");
+            console.log(data.pieceIntroduced);
+
+            this.removeUserPiece(data.pieceIntroduced);
+            this.setState({ board: data.board, nextPlayer: data.nextPlayer });
         });
     }
 
     removeUserPiece(piece) {
+        console.log("Attempting to remove piece");
+        console.log(piece);
         var index = this.state.pieces.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value));
         if (index !== -1) {
             this.state.pieces.splice(index, 1);
+            console.log(piece);
+            console.log("piece removed")
         }
-        if (this.state.pieces.length == 0) {
+        if (this.state.pieces.length === 0) {
             alert("You and your teammate won!!!. Your total score is your opponent's score: ")
         }
     }
@@ -34,6 +43,7 @@ class Domino extends Component {
             <div className="App">
                 Hello and welcome to the Domino Board.
                 You are in team: {this.props.teams[this.props.socket.id]}
+                {this.props.socket.id == this.state.nextPlayer && <p>It's your turn</p>}
                 <br></br>
                 {this.state.pieces.length == 0 && <button onClick={this.getPieces}>Click to get pieces</button>}
                 <br></br>
@@ -57,10 +67,16 @@ class Domino extends Component {
     }
 
     playPiece = (piece) => {
-        console.log("board:");
-        console.log(this.state.board);
-
-        console.log(piece);
+        if (this.state.nextPlayer == null && this.props.playerToStart != this.props.socket.id) {
+            console.log("no puedes jugar mamahuevo!");
+            this.setState({ currentPlayingPiece: null });
+            return;
+        }
+        else if (this.state.nextPlayer != null && this.state.nextPlayer != this.props.socket.id) {
+            console.log("no puedes jugar mamahuevo");
+            this.setState({ currentPlayingPiece: null });
+            return;
+        }
         // if the board is 0 and the piece is 6,6, then allow it.
         if (this.state.board.length == 0) {
             if (piece.top.value == 6 && piece.bottom.value == 6) {
@@ -68,28 +84,32 @@ class Domino extends Component {
             }
         }
         else {
-            console.log("You want to play piece: ");
+            console.log("You want to play piece.. Please choose a side... if possible");
             console.log(piece);
-            console.log("Please choose a side... if possible");
             this.setState({ currentPlayingPiece: piece });
         }
     }
 
     // halfPiece since we are only passing either the top or the bottom and verifying that the half piece the user clicked is open
     playPieceOnBoard = (halfPiece, direction) => {
-        console.log("Direction: " + direction);
         halfPiece.direction = direction;
+        console.log("direction:" + direction);
+        console.log("halfpiece (you clicked) on: ")
+        console.log(halfPiece);
         if (!halfPiece.open) {
-            console.log("invalid place to put a piece");
+            console.log("invalid place to put a piece as the half piece is not open");
+            this.setState({ currentPlayingPiece: null });
+            return;
         }
         else {
-            console.log(halfPiece);
-            if (this.state.currentPlayingPiece.top) {
+
+            if (this.state.currentPlayingPiece != null &&
+                (this.state.currentPlayingPiece.top.value == halfPiece.value || this.state.currentPlayingPiece.bottom.value == halfPiece.value)) {
+                console.log("You are allowed to play!");
+                console.log("state current playing piece:")
                 console.log(this.state.currentPlayingPiece);
-                if (this.state.currentPlayingPiece.top.value == halfPiece.value || this.state.currentPlayingPiece.bottom.value == halfPiece.value) {
-                    console.log("Emitting event...");
-                    this.props.socket.emit("PlayPiece", this.state.currentPlayingPiece, halfPiece)
-                }
+                this.props.socket.emit("PlayPiece", this.state.currentPlayingPiece, halfPiece)
+                this.setState({ currentPlayingPiece: null });
             }
         }
     }

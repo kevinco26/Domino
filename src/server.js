@@ -15,7 +15,9 @@ httpServer.listen(port, function () {
 
 var piecesToGive = []; // Maybe a better way of storing this.
 var board = []; // Maybe a better way of storing this.
-var teams = {}
+var teams = {};
+var playerTurnOrder = [];
+var nextPlayer = 0;
 
 expressApp.use(function (req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
@@ -33,11 +35,12 @@ var socketRoom;
 io.on("connection", socket => {
 
   socket.on('join', (room) => {
+    console.log(room);
     var user = io.in(room).clients((err, clients) => {
       // If there are already 4 sockets in a room, do not let the new socket join.
       if (clients.length > 3) { //(0,1,2,3)
         console.log("Sorry this room is full");
-        // should throw
+        // should throw error al ux..  oh okay this is full
       }
       else if (clients.includes(socket.id)) {
         console.log("You are already in the room");
@@ -45,18 +48,19 @@ io.on("connection", socket => {
       else {
         // verify if socket is already here (a refresh in the page)
         socket.join(room, () => {
-          socketRoom = room; // this shoild be from the url /room
-          // If the clients before the new socket joined were 3 then max number reached, begin playing.
+          socketRoom = room; // this should be from the url /room
+          // If the clients before the new socket joined were 3 - then max number reached, begin playing.
           if (clients.length == 3) {
             // ready to begin domino. Shuffle and assign pieces to players.
             let updatedClients = clients;
             updatedClients.push(socket.id);
             CreateDominoPieces(updatedClients);
-            CreateTeams(updatedClients);
+            CreatePlayerTurnOrder(updatedClients);
             console.log(teams);
             io.to(socket.rooms[socketRoom]).emit('BeginDomino', {
               message: "Let's Play! We are 4 in the room already!",
-              teams: teams
+              teams: teams,
+              playerToStart: playerTurnOrder[0]
             });
           }
         });
@@ -83,8 +87,6 @@ io.on("connection", socket => {
     }
     // if second piece is going to be played (board has 1 piece)
     else {
-      let placeToPutPiece = board.findIndex(boardPiece => (boardPiece.top.open == true && boardPiece.top.value == halfPiece.value)
-        || (boardPiece.bottom.open == true && boardPiece.bottom.value == halfPiece.value));
       if (piece.top.value == halfPiece.value) {
         console.log(halfPiece.direction)
         // this case is 6 | 6 on the board and i have 6 | 1
@@ -119,28 +121,43 @@ io.on("connection", socket => {
           // I would have 1 | 6 - 6|6.. now the opens are 1 and 6... will figure that out later
           board.splice(0, 0, piece);
         }
-        console.log("bottom!")
-        // piece.top.open = true;
-        // board[placeToPutPiece].top.open = false
-        // board.splice(0, 0, piece);
       }
-
-      SetOpenEndsOnBoard(board);
     }
+
+    nextPlayer++;
+    SetOpenEndsOnBoard(board);
+    console.log("about to refesh.. next player will be:" + playerTurnOrder[nextPlayer]);
+
     io.to(socket.rooms[socketRoom]).emit("RefreshBoard", {
       board: board,
-      pieceIntroduced: piece
+      pieceIntroduced: piece,
+      nextPlayer: playerTurnOrder[nextPlayer % 4]
     });
   });
 });
 
-function CreateTeams(clients) {
-  let shuffledArray = shuffle(clients);
-  console.log(shuffledArray);
-  teams[shuffledArray[0]] = "Team 1";
-  teams[shuffledArray[1]] = "Team 1";
-  teams[shuffledArray[2]] = "Team 2";
-  teams[shuffledArray[3]] = "Team 2";
+// Creates the turns for the players.. The orders
+function CreatePlayerTurnOrder() {
+
+  let firstPlayerToGoPiece = piecesToGive.find(p => p.top.value == 6 && p.bottom.value == 6);
+  let firstTeam = firstPlayerToGoPiece.Team;
+  let teammateOfFirstPlayerPiece = piecesToGive.find(p => p.Owner != firstPlayerToGoPiece.Owner && p.Team == firstTeam);
+
+  let secondPlayerToGoAfterFirstPlayerPiece = piecesToGive.find(p => p.Team != firstTeam);
+  let secondTeam = secondPlayerToGoAfterFirstPlayerPiece.Team;
+  let teammateOfSecondPlayerPiece = piecesToGive.find(p => p.Owner != secondPlayerToGoAfterFirstPlayerPiece.Owner && p.Team == secondTeam);
+
+  // Define players turns
+  playerTurnOrder[0] = firstPlayerToGoPiece.Owner;
+  playerTurnOrder[1] = secondPlayerToGoAfterFirstPlayerPiece.Owner;
+  playerTurnOrder[2] = teammateOfFirstPlayerPiece.Owner;
+  playerTurnOrder[3] = teammateOfSecondPlayerPiece.Owner;
+
+  // set teams for UX
+  teams[firstPlayerToGoPiece.Owner] = firstTeam;
+  teams[teammateOfFirstPlayerPiece.Owner] = firstTeam;
+  teams[secondPlayerToGoAfterFirstPlayerPiece.Owner] = secondTeam;
+  teams[teammateOfSecondPlayerPiece.Owner] = secondTeam;
 }
 
 function SetOpenEndsOnBoard(board) {
@@ -160,11 +177,18 @@ function CreateDominoPieces(clients) {
 
   // assign every 7 pieces to a client. (we can do this sequentially because we already shuffled the array)
   let clientIndex = 0;
+  let teamNumber = 1;
+  let teamIncrement = 0;
   for (let i = 0; i < 28; i++) {
     if (i % 7 == 0 && i > 0) {
       clientIndex++;
     }
+    if (teamIncrement % 14 == 0 && teamIncrement > 0) {
+      teamNumber++;
+    }
+    teamIncrement++;
     shuffledArray[i].Owner = clients[clientIndex];
+    shuffledArray[i].Team = teamNumber;
   }
 
   piecesToGive = shuffledArray;
