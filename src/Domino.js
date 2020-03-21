@@ -9,7 +9,8 @@ class Domino extends Component {
             pieces: [],
             board: [],
             currentPlayingPiece: {},
-            nextPlayer: null
+            nextPlayer: null,
+            finalScores: {}
         };
     }
     componentDidMount() {
@@ -26,8 +27,9 @@ class Domino extends Component {
     }
 
     removeUserPiece(piece) {
-        console.log("Attempting to remove piece");
-        console.log(piece);
+        if (piece == null) {
+            return;
+        }
         var index = this.state.pieces.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value));
         if (index !== -1) {
             this.state.pieces.splice(index, 1);
@@ -35,7 +37,11 @@ class Domino extends Component {
             console.log("piece removed")
         }
         if (this.state.pieces.length === 0) {
-            alert("You and your teammate won!!!. Your total score is your opponent's score: ")
+            this.getScore();
+            // if this socket is in team 1 then opponent score is team 2's score.. 
+            // else (this socket is in team 2), opponent's score is team 1
+            let opponentScore = this.props.teams[this.props.socket.id] == 1 ? this.state.finalScores["team2"] : this.state.finalScores["team1"]
+            alert("You and your teammate won!!!. Your total score is your opponent's score: " + opponentScore)
         }
     }
     render() {
@@ -46,6 +52,8 @@ class Domino extends Component {
                 {this.props.socket.id == this.state.nextPlayer && <p>It's your turn</p>}
                 <br></br>
                 {this.state.pieces.length == 0 && <button onClick={this.getPieces}>Click to get pieces</button>}
+                <br></br>
+                {<button onClick={this.noAvailableMoves}>Click to pass (if no available moves)</button>}
                 <br></br>
                 Your pieces are: {
                     this.state.pieces.map((piece) => <li><button onClick={this.playPiece.bind(this, piece)}>{piece.top.value} | {piece.bottom.value}</button></li>)}
@@ -64,6 +72,17 @@ class Domino extends Component {
         axios.get(`http://127.0.0.1:8080/pieces?clientId=${this.props.socket.id}`).then(response => {
             this.setState({ pieces: response.data });
         })
+
+    }
+
+    getScore = () => {
+        axios.get("http://127.0.0.1:8080/getFinalScore").then(response => {
+            this.setState({ finalScores: response.data });
+        })
+    }
+
+    noAvailableMoves = () => {
+        this.props.socket.emit("Pass")
     }
 
     playPiece = (piece) => {

@@ -12,12 +12,13 @@ httpServer.listen(port, function () {
   console.log('Server running at http://127.0.0.1:8080');
 });
 
-
 var piecesToGive = []; // Maybe a better way of storing this.
 var board = []; // Maybe a better way of storing this.
 var teams = {};
 var playerTurnOrder = [];
 var nextPlayer = 0;
+
+var piecesInPlayerHands;
 
 expressApp.use(function (req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
@@ -30,6 +31,24 @@ expressApp.use(function (req, res, next) {
 expressApp.get('/pieces', function (request, response) {
   response.send(piecesToGive.filter(piece => piece.Owner == request.query["clientId"]));
 });
+
+// Gets the pieces left in each player's hand
+// this will be used at the end to compute the score
+expressApp.get('/getFinalScore', function (request, response) {
+  let scoreTeam1 = 0;
+  let scoreTeam2 = 0;
+  piecesInPlayerHands.forEach((p) => {
+    if (p.Team == 1) {
+      scoreTeam1 += p.top.value + p.bottom.value;
+    }
+    else {
+      scoreTeam2 += p.top.value + p.bottom.value;
+    }
+  });
+  let dataTosend = { "team1": scoreTeam1, "team2": scoreTeam2 };
+  response.send(dataTosend);
+});
+
 
 var socketRoom;
 io.on("connection", socket => {
@@ -68,9 +87,19 @@ io.on("connection", socket => {
     });
   });
 
+  socket.on("Pass", () => {
+    nextPlayer++;
+    io.to(socket.rooms[socketRoom]).emit("RefreshBoard", {
+      board: board,
+      pieceIntroduced: null,
+      nextPlayer: playerTurnOrder[nextPlayer % 4]
+    });
+  });
+
   // halfPiece is the part of the piece that we are playing with.
   // si tenemos un 5|4, halfpiece nos va a decir si queremos jugar el 5 o el 4
   socket.on("PlayPiece", (piece, halfPiece) => {
+
     console.log("received piece:");
     console.log(piece.top.value + "|" + piece.bottom.value);
 
@@ -126,8 +155,9 @@ io.on("connection", socket => {
 
     nextPlayer++;
     SetOpenEndsOnBoard(board);
-    console.log("about to refesh.. next player will be:" + playerTurnOrder[nextPlayer]);
 
+    // Updaet the current pieces that are in the player's hands
+    piecesInPlayerHands.splice(piecesInPlayerHands.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value)), 1);
     io.to(socket.rooms[socketRoom]).emit("RefreshBoard", {
       board: board,
       pieceIntroduced: piece,
@@ -192,6 +222,8 @@ function CreateDominoPieces(clients) {
   }
 
   piecesToGive = shuffledArray;
+  piecesInPlayerHands = piecesToGive;
+
   console.log(shuffledArray);
 }
 
