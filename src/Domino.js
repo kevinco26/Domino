@@ -92,7 +92,7 @@ class Domino extends Component {
     }
 
     getPieces = () => {
-        axios.get(`http://127.0.0.1:8080/pieces?clientId=${this.props.socket.id}`).then(response => {
+        axios.get(`/pieces?clientId=${this.props.socket.id}`).then(response => {
             this.setState({ pieces: response.data });
         })
     }

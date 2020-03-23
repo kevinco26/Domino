@@ -6,7 +6,7 @@ import './App.css';
 
 // Is here the right place?
 // how to handle refresh different socket?
-let socket = socketIOClient("http://127.0.0.1:8080");;
+let socket = socketIOClient();
 class App extends Component {
 
   constructor() {
