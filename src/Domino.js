@@ -10,7 +10,8 @@ class Domino extends Component {
             board: [],
             currentPlayingPiece: {},
             nextPlayer: null,
-            finalScores: {}
+            roundOver: true,
+            roundNumber: 0
         };
     }
     componentDidMount() {
@@ -23,6 +24,24 @@ class Domino extends Component {
 
             this.removeUserPiece(data.pieceIntroduced);
             this.setState({ board: data.board, nextPlayer: data.nextPlayer });
+        });
+
+        this.props.socket.on("BeginNewRound", (data) => {
+            this.setState({ board: data.board, nextPlayer: data.playerToStart, pieces: [], currentPlayingPiece: {}, roundOver: false, roundNumber: data.roundNumber });
+
+        });
+
+        this.props.socket.on("RoundOver", (data) => {
+            let losingTeamScore = data.winningTeam == 1 ? data.scores["team2"] : data.scores["team1"];
+            if (this.props.teams[this.props.socket.id] == data.winningTeam) {
+                alert("You and your teammate won this round! your oppoinent's score:" + losingTeamScore);
+            }
+            else {
+                alert("You and your teammate lost this round! your score:" + losingTeamScore);
+            }
+
+            // flag round is over.
+            this.setState({ roundOver: true });
         });
     }
 
@@ -37,11 +56,7 @@ class Domino extends Component {
             console.log("piece removed")
         }
         if (this.state.pieces.length === 0) {
-            this.getScore();
-            // if this socket is in team 1 then opponent score is team 2's score.. 
-            // else (this socket is in team 2), opponent's score is team 1
-            let opponentScore = this.props.teams[this.props.socket.id] == 1 ? this.state.finalScores["team2"] : this.state.finalScores["team1"]
-            alert("You and your teammate won!!!. Your total score is your opponent's score: " + opponentScore)
+            this.endRound();
         }
     }
     render() {
@@ -64,41 +79,54 @@ class Domino extends Component {
                         this.state.board.map((piece) => <button style={{ marginRight: "1px", marginLeft: "1px" }} disabled={true}><button onClick={this.playPieceOnBoard.bind(this, piece.top, "left")}>{piece.top.value}</button> | <button onClick={this.playPieceOnBoard.bind(this, piece.bottom, "right")}>{piece.bottom.value}</button></button>)
                     }
                 </div>
+                <div style={{ marginTop: "50px" }}>
+                    {this.state.roundOver && <button onClick={this.readyUp}>Click to ready up for next round</button>}
+                </div>
             </div >
         );
+    }
+
+    readyUp = () => {
+        // ready up next round
+        this.props.socket.emit("ReadyUp", this.props.socket.id);
     }
 
     getPieces = () => {
         axios.get(`http://127.0.0.1:8080/pieces?clientId=${this.props.socket.id}`).then(response => {
             this.setState({ pieces: response.data });
         })
-
     }
 
-    getScore = () => {
-        axios.get("http://127.0.0.1:8080/getFinalScore").then(response => {
-            this.setState({ finalScores: response.data });
-        })
+    endRound = () => {
+        this.props.socket.emit("endRound", this.props.teams[this.props.socket.id]);
     }
 
     noAvailableMoves = () => {
+        // check if the player really can't pass... 
+        // also check if its the player's turn.. maybe we can put this button only if its the player's turn
         this.props.socket.emit("Pass")
     }
 
     playPiece = (piece) => {
+        // we have the playerToStart because the first round/piece does not get emmitted from the server rather passed from the App.js component
+        // so we must have this playertostart variable hanging around here.
         if (this.state.nextPlayer == null && this.props.playerToStart != this.props.socket.id) {
-            console.log("no puedes jugar mamahuevo!");
+            console.log("Cannot play");
             this.setState({ currentPlayingPiece: null });
             return;
         }
         else if (this.state.nextPlayer != null && this.state.nextPlayer != this.props.socket.id) {
-            console.log("no puedes jugar mamahuevo");
+            console.log("Cannot play");
             this.setState({ currentPlayingPiece: null });
             return;
         }
-        // if the board is 0 and the piece is 6,6, then allow it.
+        // if the board is 0 and the piece is 6,6 in the first round, allow it.
+        // in subsequent rounds, the nextplayer wont be null. meaning we will always check if its the player's turn.
         if (this.state.board.length == 0) {
-            if (piece.top.value == 6 && piece.bottom.value == 6) {
+            if (this.state.roundNumber == 0 && piece.top.value != 6 && piece.bottom.value != 6) {
+                console.log("Cannot play if its not 6-6 on the first round!")
+            }
+            else {
                 this.props.socket.emit("PlayPiece", piece, null);
             }
         }
