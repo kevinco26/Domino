@@ -17,7 +17,9 @@ var board = []; // Maybe a better way of storing this.
 var teams = {};
 var playerTurnOrder = [];
 var nextPlayer = 0;
-
+var nextClientToStartRound = 0;
+var roundNumber = 0;
+var listOfReadyUpSockets = {};
 var piecesInPlayerHands;
 
 expressApp.use(function (req, res, next) {
@@ -31,24 +33,6 @@ expressApp.use(function (req, res, next) {
 expressApp.get('/pieces', function (request, response) {
   response.send(piecesToGive.filter(piece => piece.Owner == request.query["clientId"]));
 });
-
-// Gets the pieces left in each player's hand
-// this will be used at the end to compute the score
-expressApp.get('/getFinalScore', function (request, response) {
-  let scoreTeam1 = 0;
-  let scoreTeam2 = 0;
-  piecesInPlayerHands.forEach((p) => {
-    if (p.Team == 1) {
-      scoreTeam1 += p.top.value + p.bottom.value;
-    }
-    else {
-      scoreTeam2 += p.top.value + p.bottom.value;
-    }
-  });
-  let dataTosend = { "team1": scoreTeam1, "team2": scoreTeam2 };
-  response.send(dataTosend);
-});
-
 
 var socketRoom;
 io.on("connection", socket => {
@@ -77,7 +61,6 @@ io.on("connection", socket => {
             CreatePlayerTurnOrder(updatedClients);
             console.log(teams);
             io.to(socket.rooms[socketRoom]).emit('BeginDomino', {
-              message: "Let's Play! We are 4 in the room already!",
               teams: teams,
               playerToStart: playerTurnOrder[0]
             });
@@ -93,6 +76,53 @@ io.on("connection", socket => {
       board: board,
       pieceIntroduced: null,
       nextPlayer: playerTurnOrder[nextPlayer % 4]
+    });
+  });
+
+  socket.on("ReadyUp", (socketId) => {
+
+    if (listOfReadyUpSockets[socketId]) {
+      console.log("already readied up")
+    }
+    else {
+      listOfReadyUpSockets[socketId] = true
+      let arrayClients = Object.keys(listOfReadyUpSockets);
+      if (arrayClients.length == 4) {
+
+        // resetting states
+        listOfReadyUpSockets = {};
+        board = [];
+        CreateDominoPieces(arrayClients);
+        nextClientToStartRound++;
+        roundNumber++;
+        io.to(socket.rooms[socketRoom]).emit("BeginNewRound", {
+          board: board,
+          playerToStart: playerTurnOrder[nextClientToStartRound % 4],
+          roundNumber: roundNumber
+        });
+      }
+    }
+  });
+
+  socket.on("endRound", (winningTeam) => {
+    let finalScores = GetScores();
+
+    // Scoring works this way: First team to 100 loses.
+    // If team 1 won then we sum up the pieces of team2 and give that sum(score) to them.
+    // Similarily, if team 2 won then we sum up the pieces of team1 and give that sum to them.
+    // If no team won (this api will have winningTeam = 0 or null, TBD) then return the scores of both teams as we need to add them to both
+    // We are not storing scores yet.. this is for the ux para que por ahora nosotros lo anotemos
+
+    if (winningTeam == 1) {
+      finalScores["team1"] = 0;
+    }
+    if (winningTeam == 2) {
+      finalScores["team2"] = 0;
+    }
+
+    io.to(socket.rooms[socketRoom]).emit("RoundOver", {
+      scores: finalScores,
+      winningTeam: winningTeam
     });
   });
 
@@ -165,6 +195,20 @@ io.on("connection", socket => {
     });
   });
 });
+
+function GetScores() {
+  let scoreTeam1 = 0;
+  let scoreTeam2 = 0;
+  piecesInPlayerHands.forEach((p) => {
+    if (p.Team == 1) {
+      scoreTeam1 += p.top.value + p.bottom.value;
+    }
+    else {
+      scoreTeam2 += p.top.value + p.bottom.value;
+    }
+  });
+  return { "team1": scoreTeam1, "team2": scoreTeam2 };
+}
 
 // Creates the turns for the players.. The orders
 function CreatePlayerTurnOrder() {
