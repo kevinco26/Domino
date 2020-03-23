@@ -10,7 +10,7 @@ class Domino extends Component {
             board: [],
             currentPlayingPiece: {},
             nextPlayer: null,
-            roundOver: true,
+            roundOver: false,
             roundNumber: 0
         };
     }
@@ -92,7 +92,9 @@ class Domino extends Component {
     }
 
     getPieces = () => {
+        console.log("pieces");
         axios.get(`/pieces?clientId=${this.props.socket.id}`).then(response => {
+            console.log(response);
             this.setState({ pieces: response.data });
         })
     }

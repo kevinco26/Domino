@@ -1,6 +1,6 @@
 // Setting up variables
 
-var express = require ('express');
+var express = require('express');
 var expressApp = express();
 var httpServer = require("http").Server(expressApp);
 const socketIo = require("socket.io");
@@ -31,7 +31,7 @@ const path = require('path')
 expressApp.use(express.static(path.join(__dirname, '/build')))
 
 // Anything that doesn't match the above, send back index.html
-expressApp.get('*', (req, res) => {
+expressApp.get('/', (req, res) => {
   res.sendFile(path.join(__dirname + '/build/index.html'))
 })
 
@@ -45,6 +45,7 @@ expressApp.use(function (req, res, next) {
 // Gets the pieces for the specified user in the query. 
 // This should be used as /pieces?clientId=<clientid>
 expressApp.get('/pieces', function (request, response) {
+  console.log("pieces!!");
   response.send(piecesToGive.filter(piece => piece.Owner == request.query["clientId"]));
 });
 
