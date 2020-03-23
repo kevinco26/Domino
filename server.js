@@ -1,5 +1,7 @@
 // Setting up variables
-var expressApp = require("express")();
+
+var express = require ('express');
+var expressApp = express();
 var httpServer = require("http").Server(expressApp);
 const socketIo = require("socket.io");
 const config = { pingTimeout: 60000 };
@@ -21,6 +23,18 @@ var nextClientToStartRound = 0;
 var roundNumber = 0;
 var listOfReadyUpSockets = {};
 var piecesInPlayerHands;
+
+
+const path = require('path')
+
+// Serve static files from the React frontend app
+expressApp.use(express.static(path.join(__dirname, '/build')))
+
+// Anything that doesn't match the above, send back index.html
+expressApp.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname + '/build/index.html'))
+})
+
 
 expressApp.use(function (req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
