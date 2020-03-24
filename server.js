@@ -49,7 +49,6 @@ expressApp.get('/pieces', function (request, response) {
   response.send(piecesToGive.filter(piece => piece.Owner == request.query["clientId"]));
 });
 
-var socketRoom;
 io.on("connection", socket => {
 
   socket.on('join', (room) => {
@@ -66,7 +65,6 @@ io.on("connection", socket => {
       else {
         // verify if socket is already here (a refresh in the page)
         socket.join(room, () => {
-          socketRoom = room; // this should be from the url /room
           // If the clients before the new socket joined were 3 - then max number reached, begin playing.
           if (clients.length == 3) {
             // ready to begin domino. Shuffle and assign pieces to players.
@@ -75,7 +73,7 @@ io.on("connection", socket => {
             CreateDominoPieces(updatedClients);
             CreatePlayerTurnOrder(updatedClients);
             console.log(teams);
-            io.to(socket.rooms[socketRoom]).emit('BeginDomino', {
+            io.to(socket.rooms[room]).emit('BeginDomino', {
               teams: teams,
               playerToStart: playerTurnOrder[0]
             });
@@ -86,8 +84,9 @@ io.on("connection", socket => {
   });
 
   socket.on("Pass", () => {
+    let room = socket.rooms[0];
     nextPlayer++;
-    io.to(socket.rooms[socketRoom]).emit("RefreshBoard", {
+    io.to(socket.rooms[room]).emit("RefreshBoard", {
       board: board,
       pieceIntroduced: null,
       nextPlayer: playerTurnOrder[nextPlayer % 4]
@@ -95,6 +94,7 @@ io.on("connection", socket => {
   });
 
   socket.on("ReadyUp", (socketId) => {
+    let room = socket.rooms[0];
 
     if (listOfReadyUpSockets[socketId]) {
       console.log("already readied up")
@@ -110,7 +110,7 @@ io.on("connection", socket => {
         CreateDominoPieces(arrayClients);
         nextClientToStartRound++;
         roundNumber++;
-        io.to(socket.rooms[socketRoom]).emit("BeginNewRound", {
+        io.to(socket.rooms[room]).emit("BeginNewRound", {
           board: board,
           playerToStart: playerTurnOrder[nextClientToStartRound % 4],
           roundNumber: roundNumber
@@ -120,6 +120,8 @@ io.on("connection", socket => {
   });
 
   socket.on("endRound", (winningTeam) => {
+    let room = socket.rooms[0];
+    
     let finalScores = GetScores();
 
     // Scoring works this way: First team to 100 loses.
@@ -135,7 +137,7 @@ io.on("connection", socket => {
       finalScores["team2"] = 0;
     }
 
-    io.to(socket.rooms[socketRoom]).emit("RoundOver", {
+    io.to(socket.rooms[room]).emit("RoundOver", {
       scores: finalScores,
       winningTeam: winningTeam
     });
@@ -144,6 +146,7 @@ io.on("connection", socket => {
   // halfPiece is the part of the piece that we are playing with.
   // si tenemos un 5|4, halfpiece nos va a decir si queremos jugar el 5 o el 4
   socket.on("PlayPiece", (piece, halfPiece) => {
+    let room = socket.rooms[0];
 
     console.log("received piece:");
     console.log(piece.top.value + "|" + piece.bottom.value);
@@ -203,7 +206,7 @@ io.on("connection", socket => {
 
     // Updaet the current pieces that are in the player's hands
     piecesInPlayerHands.splice(piecesInPlayerHands.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value)), 1);
-    io.to(socket.rooms[socketRoom]).emit("RefreshBoard", {
+    io.to(socket.rooms[room]).emit("RefreshBoard", {
       board: board,
       pieceIntroduced: piece,
       nextPlayer: playerTurnOrder[nextPlayer % 4]
