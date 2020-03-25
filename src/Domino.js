@@ -49,6 +49,11 @@ class Domino extends Component {
         if (piece == null) {
             return;
         }
+        // they havent gotten their initial pieces
+        // maybe do it with some other flag later.. isRoundStarted
+        if (this.state.pieces.length === 0) {
+            return;
+        }
         var index = this.state.pieces.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value));
         if (index !== -1) {
             this.state.pieces.splice(index, 1);

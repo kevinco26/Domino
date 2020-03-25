@@ -14,17 +14,7 @@ httpServer.listen(port, function () {
   console.log('Server running at http://127.0.0.1:8080');
 });
 
-var piecesToGive = []; // Maybe a better way of storing this.
-var board = []; // Maybe a better way of storing this.
-var teams = {};
-var playerTurnOrder = [];
-var nextPlayer = 0;
-var nextClientToStartRound = 0;
-var roundNumber = 0;
-var listOfReadyUpSockets = {};
-var piecesInPlayerHands;
-
-
+var roomToPropertiesMap = {}; // new Map();
 const path = require('path')
 
 // Serve static files from the React frontend app
@@ -45,8 +35,10 @@ expressApp.use(function (req, res, next) {
 // Gets the pieces for the specified user in the query. 
 // This should be used as /pieces?clientId=<clientid>
 expressApp.get('/pieces', function (request, response) {
-  console.log("pieces!!");
-  response.send(piecesToGive.filter(piece => piece.Owner == request.query["clientId"]));
+  let socketId = request.query["clientId"];
+  let rooms = io.sockets.sockets[socketId].rooms;
+  let room = Object.keys(rooms)[1];
+  response.send(roomToPropertiesMap[room].piecesToGive.filter(piece => piece.Owner == socketId));
 });
 
 io.on("connection", socket => {
@@ -70,12 +62,25 @@ io.on("connection", socket => {
             // ready to begin domino. Shuffle and assign pieces to players.
             let updatedClients = clients;
             updatedClients.push(socket.id);
-            CreateDominoPieces(updatedClients);
-            CreatePlayerTurnOrder(updatedClients);
-            console.log(teams);
+
+            roomToPropertiesMap[room] = {
+              board: [],
+              piecesInPlayerHands: [],
+              piecesToGive: [],
+              playerTurnOrder: [],
+              nextPlayer: 0,
+              nextClientToStartRound: 0,
+              roundNumber: 0,
+              listOfReadyUpSockets: {},
+              teams: {}
+            }
+
+            CreateDominoPieces(updatedClients, room);
+            CreatePlayerTurnOrder(room);
+            console.log(roomToPropertiesMap[room].teams);
             io.to(socket.rooms[room]).emit('BeginDomino', {
-              teams: teams,
-              playerToStart: playerTurnOrder[0]
+              teams: roomToPropertiesMap[room].teams,
+              playerToStart: roomToPropertiesMap[room].playerTurnOrder[0]
             });
           }
         });
@@ -84,45 +89,54 @@ io.on("connection", socket => {
   });
 
   socket.on("Pass", () => {
-    let room = socket.rooms[0];
-    nextPlayer++;
+    // For now, one socket per room. Object.keys(socket.rooms) -> [socketId, room]
+    let room = Object.keys(socket.rooms)[1];
+    roomToPropertiesMap[room].nextPlayer++;
     io.to(socket.rooms[room]).emit("RefreshBoard", {
-      board: board,
+      board: roomToPropertiesMap[room].board,
       pieceIntroduced: null,
-      nextPlayer: playerTurnOrder[nextPlayer % 4]
+      nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4]
     });
   });
 
   socket.on("ReadyUp", (socketId) => {
-    let room = socket.rooms[0];
-
-    if (listOfReadyUpSockets[socketId]) {
+    let room = Object.keys(socket.rooms)[1];
+    if (roomToPropertiesMap[room].listOfReadyUpSockets[socketId]) {
       console.log("already readied up")
     }
     else {
-      listOfReadyUpSockets[socketId] = true
-      let arrayClients = Object.keys(listOfReadyUpSockets);
+      roomToPropertiesMap[room].listOfReadyUpSockets[socketId] = true
+      let arrayClients = Object.keys(roomToPropertiesMap[room].listOfReadyUpSockets);
       if (arrayClients.length == 4) {
 
         // resetting states
-        listOfReadyUpSockets = {};
-        board = [];
-        CreateDominoPieces(arrayClients);
-        nextClientToStartRound++;
-        roundNumber++;
+        roomToPropertiesMap[room] = {
+          board: [],
+          piecesInPlayerHands: [],
+          piecesToGive: [],
+          nextPlayer: 0,
+          listOfReadyUpSockets: {},
+          nextClientToStartRound: roomToPropertiesMap[room].nextClientToStartRound + 1,
+          roundNumber: roomToPropertiesMap[room].roundNumber + 1,
+          teams: roomToPropertiesMap[room].teams,
+          playerTurnOrder: roomToPropertiesMap[room].playerTurnOrder
+        }
+
+        console.log(roomToPropertiesMap[room]);
+
+        CreateDominoPieces(arrayClients, room);
         io.to(socket.rooms[room]).emit("BeginNewRound", {
-          board: board,
-          playerToStart: playerTurnOrder[nextClientToStartRound % 4],
-          roundNumber: roundNumber
+          board: roomToPropertiesMap[room].board,
+          playerToStart: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextClientToStartRound % 4],
+          roundNumber: roomToPropertiesMap[room].roundNumber
         });
       }
     }
   });
 
   socket.on("endRound", (winningTeam) => {
-    let room = socket.rooms[0];
-    
-    let finalScores = GetScores();
+    let room = Object.keys(socket.rooms)[1];
+    let finalScores = GetScores(room);
 
     // Scoring works this way: First team to 100 loses.
     // If team 1 won then we sum up the pieces of team2 and give that sum(score) to them.
@@ -146,8 +160,7 @@ io.on("connection", socket => {
   // halfPiece is the part of the piece that we are playing with.
   // si tenemos un 5|4, halfpiece nos va a decir si queremos jugar el 5 o el 4
   socket.on("PlayPiece", (piece, halfPiece) => {
-    let room = socket.rooms[0];
-
+    let room = Object.keys(socket.rooms)[1];
     console.log("received piece:");
     console.log(piece.top.value + "|" + piece.bottom.value);
 
@@ -157,10 +170,10 @@ io.on("connection", socket => {
 
     // need to figure out how to put it in the right array order maybe...?
     // If starting, push it at the beginning
-    if (board.length == 0) {
+    if (roomToPropertiesMap[room].board.length == 0) {
       piece.top.open = true;
       piece.bottom.open = true;
-      board.push(piece);
+      roomToPropertiesMap[room].board.push(piece);
     }
     // if second piece is going to be played (board has 1 piece)
     else {
@@ -170,7 +183,7 @@ io.on("connection", socket => {
         if (halfPiece.direction == "right") {
           // I clicked on the left so I just need to put the 1 | 6 at the left of the board.
           // I would have 1 | 6 - 6|6.. now the opens are 1 and 6... will figure that out later
-          board.push(piece);
+          roomToPropertiesMap[room].board.push(piece);
         }
         else {
           // I clicked on the right. so I need to invert the 1 |  6 so that its 6| 6 - 6 | 1
@@ -178,7 +191,7 @@ io.on("connection", socket => {
           var tempTop = piece.top;
           piece.top = piece.bottom;
           piece.bottom = tempTop;
-          board.splice(0, 0, piece);
+          roomToPropertiesMap[room].board.splice(0, 0, piece);
         }
       }
       else if (piece.bottom.value == halfPiece.value) {
@@ -191,33 +204,33 @@ io.on("connection", socket => {
           piece.top = piece.bottom;
           piece.bottom = tempTop;
           piece.bottom.open = true;
-          board.push(piece);
+          roomToPropertiesMap[room].board.push(piece);
         }
         else {
           // I clicked on the left so I just need to put the 1 | 6 at the left of the board.
           // I would have 1 | 6 - 6|6.. now the opens are 1 and 6... will figure that out later
-          board.splice(0, 0, piece);
+          roomToPropertiesMap[room].board.splice(0, 0, piece);
         }
       }
     }
 
-    nextPlayer++;
-    SetOpenEndsOnBoard(board);
+    roomToPropertiesMap[room].nextPlayer++;
+    SetOpenEndsOnBoard(roomToPropertiesMap[room].board);
 
     // Updaet the current pieces that are in the player's hands
-    piecesInPlayerHands.splice(piecesInPlayerHands.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value)), 1);
+    roomToPropertiesMap[room].piecesInPlayerHands.splice(roomToPropertiesMap[room].piecesInPlayerHands.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value)), 1);
     io.to(socket.rooms[room]).emit("RefreshBoard", {
-      board: board,
+      board: roomToPropertiesMap[room].board,
       pieceIntroduced: piece,
-      nextPlayer: playerTurnOrder[nextPlayer % 4]
+      nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4]
     });
   });
 });
 
-function GetScores() {
+function GetScores(room) {
   let scoreTeam1 = 0;
   let scoreTeam2 = 0;
-  piecesInPlayerHands.forEach((p) => {
+  roomToPropertiesMap[room].piecesInPlayerHands.forEach((p) => {
     if (p.Team == 1) {
       scoreTeam1 += p.top.value + p.bottom.value;
     }
@@ -229,27 +242,27 @@ function GetScores() {
 }
 
 // Creates the turns for the players.. The orders
-function CreatePlayerTurnOrder() {
+function CreatePlayerTurnOrder(room) {
 
-  let firstPlayerToGoPiece = piecesToGive.find(p => p.top.value == 6 && p.bottom.value == 6);
+  let firstPlayerToGoPiece = roomToPropertiesMap[room].piecesToGive.find(p => p.top.value == 6 && p.bottom.value == 6);
   let firstTeam = firstPlayerToGoPiece.Team;
-  let teammateOfFirstPlayerPiece = piecesToGive.find(p => p.Owner != firstPlayerToGoPiece.Owner && p.Team == firstTeam);
+  let teammateOfFirstPlayerPiece = roomToPropertiesMap[room].piecesToGive.find(p => p.Owner != firstPlayerToGoPiece.Owner && p.Team == firstTeam);
 
-  let secondPlayerToGoAfterFirstPlayerPiece = piecesToGive.find(p => p.Team != firstTeam);
+  let secondPlayerToGoAfterFirstPlayerPiece = roomToPropertiesMap[room].piecesToGive.find(p => p.Team != firstTeam);
   let secondTeam = secondPlayerToGoAfterFirstPlayerPiece.Team;
-  let teammateOfSecondPlayerPiece = piecesToGive.find(p => p.Owner != secondPlayerToGoAfterFirstPlayerPiece.Owner && p.Team == secondTeam);
+  let teammateOfSecondPlayerPiece = roomToPropertiesMap[room].piecesToGive.find(p => p.Owner != secondPlayerToGoAfterFirstPlayerPiece.Owner && p.Team == secondTeam);
 
   // Define players turns
-  playerTurnOrder[0] = firstPlayerToGoPiece.Owner;
-  playerTurnOrder[1] = secondPlayerToGoAfterFirstPlayerPiece.Owner;
-  playerTurnOrder[2] = teammateOfFirstPlayerPiece.Owner;
-  playerTurnOrder[3] = teammateOfSecondPlayerPiece.Owner;
+  roomToPropertiesMap[room].playerTurnOrder[0] = firstPlayerToGoPiece.Owner;
+  roomToPropertiesMap[room].playerTurnOrder[1] = secondPlayerToGoAfterFirstPlayerPiece.Owner;
+  roomToPropertiesMap[room].playerTurnOrder[2] = teammateOfFirstPlayerPiece.Owner;
+  roomToPropertiesMap[room].playerTurnOrder[3] = teammateOfSecondPlayerPiece.Owner;
 
   // set teams for UX
-  teams[firstPlayerToGoPiece.Owner] = firstTeam;
-  teams[teammateOfFirstPlayerPiece.Owner] = firstTeam;
-  teams[secondPlayerToGoAfterFirstPlayerPiece.Owner] = secondTeam;
-  teams[teammateOfSecondPlayerPiece.Owner] = secondTeam;
+  roomToPropertiesMap[room].teams[firstPlayerToGoPiece.Owner] = firstTeam;
+  roomToPropertiesMap[room].teams[teammateOfFirstPlayerPiece.Owner] = firstTeam;
+  roomToPropertiesMap[room].teams[secondPlayerToGoAfterFirstPlayerPiece.Owner] = secondTeam;
+  roomToPropertiesMap[room].teams[teammateOfSecondPlayerPiece.Owner] = secondTeam;
 }
 
 function SetOpenEndsOnBoard(board) {
@@ -261,7 +274,7 @@ function SetOpenEndsOnBoard(board) {
   board[board.length - 1].bottom.open = true;
 
 }
-function CreateDominoPieces(clients) {
+function CreateDominoPieces(clients, room) {
   // create the pieces.
   let piecesDealt = ConstructInitialPiecesArray();
   // shuffle the array.
@@ -283,8 +296,8 @@ function CreateDominoPieces(clients) {
     shuffledArray[i].Team = teamNumber;
   }
 
-  piecesToGive = shuffledArray;
-  piecesInPlayerHands = piecesToGive;
+  roomToPropertiesMap[room].piecesToGive = shuffledArray;
+  roomToPropertiesMap[room].piecesInPlayerHands = shuffledArray;
 
   console.log(shuffledArray);
 }
