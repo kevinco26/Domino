@@ -1,4 +1,5 @@
 ## Domino - IN DEVELOPMENT...
+deploying
 To start:
 1. Clone repo
 2. run `npm install`. This will create the node_modules folder with all the dependencies.
