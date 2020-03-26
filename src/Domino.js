@@ -33,7 +33,7 @@ class Domino extends Component {
 
         this.props.socket.on("RoundOver", (data) => {
             let losingTeamScore = data.winningTeam == 1 ? data.scores["team2"] : data.scores["team1"];
-            if (this.props.teams[this.props.socket.id] == data.winningTeam) {
+            if (this.props.teams[this.props.playerName] == data.winningTeam) {
                 alert("You and your teammate won this round! your oppoinent's score:" + losingTeamScore);
             }
             else {
@@ -68,8 +68,9 @@ class Domino extends Component {
         return (
             <div className="App">
                 Hello and welcome to the Domino Board.
-                You are in team: {this.props.teams[this.props.socket.id]}
-                {this.props.socket.id == this.state.nextPlayer && <p>It's your turn</p>}
+                You are in team: {this.props.teams[this.props.playerName]}
+                Your name: {this.props.playerName}
+                {this.props.playerName == this.state.nextPlayer && <p>It's your turn</p>}
                 <br></br>
                 {this.state.pieces.length == 0 && <button onClick={this.getPieces}>Click to get pieces</button>}
                 <br></br>
@@ -93,7 +94,7 @@ class Domino extends Component {
 
     readyUp = () => {
         // ready up next round
-        this.props.socket.emit("ReadyUp", this.props.socket.id);
+        this.props.socket.emit("ReadyUp", this.props.playerName);
     }
 
     getPieces = () => {
@@ -105,7 +106,7 @@ class Domino extends Component {
     }
 
     endRound = () => {
-        this.props.socket.emit("endRound", this.props.teams[this.props.socket.id]);
+        this.props.socket.emit("endRound", this.props.teams[this.props.playerName]);
     }
 
     noAvailableMoves = () => {
@@ -115,14 +116,17 @@ class Domino extends Component {
     }
 
     playPiece = (piece) => {
+        console.log("PLayer that should start");
+        console.log(this.state.nextPlayer);
+        console.log(this.props.playerToStart);
         // we have the playerToStart because the first round/piece does not get emmitted from the server rather passed from the App.js component
         // so we must have this playertostart variable hanging around here.
-        if (this.state.nextPlayer == null && this.props.playerToStart != this.props.socket.id) {
+        if (this.state.nextPlayer == null && this.props.playerToStart != this.props.playerName) {
             console.log("Cannot play");
             this.setState({ currentPlayingPiece: null });
             return;
         }
-        else if (this.state.nextPlayer != null && this.state.nextPlayer != this.props.socket.id) {
+        else if (this.state.nextPlayer != null && this.state.nextPlayer != this.props.playerName) {
             console.log("Cannot play");
             this.setState({ currentPlayingPiece: null });
             return;

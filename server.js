@@ -15,6 +15,7 @@ httpServer.listen(port, function () {
 });
 
 var roomToPropertiesMap = {}; // new Map();
+var roomToPlayersWithSocketIdsMap = {}; // new Map();
 const path = require('path')
 
 // Serve static files from the React frontend app
@@ -35,18 +36,35 @@ expressApp.use(function (req, res, next) {
 // Gets the pieces for the specified user in the query. 
 // This should be used as /pieces?clientId=<clientid>
 expressApp.get('/pieces', function (request, response) {
+  console.log("attempting to get pieces");
   let socketId = request.query["clientId"];
-  let rooms = io.sockets.sockets[socketId].rooms;
-  let room = Object.keys(rooms)[1];
-  response.send(roomToPropertiesMap[room].piecesToGive.filter(piece => piece.Owner == socketId));
+  let socket = io.sockets.sockets[socketId];
+  if (socket) {
+    let rooms = socket.rooms;
+    let room = Object.keys(rooms)[1];
+    let userIndex = roomToPlayersWithSocketIdsMap[room].findIndex(rtp => rtp.socketId == socketId);
+    let user = roomToPlayersWithSocketIdsMap[room][userIndex].playerName
+    response.send(roomToPropertiesMap[room].piecesToGive.filter(piece => piece.Owner == user));
+  }
+  else {
+    // handle this in the ux. Basically we could not find the socket
+    response.sendStatus(500);
+  }
 });
 
 io.on("connection", socket => {
+  console.log("Socket connected:");
+  console.log(socket.id);
 
-  socket.on('join', (room) => {
+  socket.on('join', (room, playerName) => {
     console.log(room);
     var user = io.in(room).clients((err, clients) => {
       // If there are already 4 sockets in a room, do not let the new socket join.
+      console.log("Trying to join room!!!!");
+      console.log("Clients:");
+      console.log(clients);
+      console.log("Error");
+      console.log(err);
       if (clients.length > 3) { //(0,1,2,3)
         console.log("Sorry this room is full");
         // should throw error al ux..  oh okay this is full
@@ -55,33 +73,72 @@ io.on("connection", socket => {
         console.log("You are already in the room");
       }
       else {
-        // verify if socket is already here (a refresh in the page)
+        // when a person joins a room, update the players map.
+        if (roomToPropertiesMap[room] && roomToPropertiesMap[room].gameWasStartedBefore) {
+          // only allow if this person contains same username.
+          let playerIndex = roomToPlayersWithSocketIdsMap[room].findIndex(playerToSocket => playerToSocket.playerName == playerName);
+          if (playerIndex == -1) {
+            console.log("Sorry, please choose a different name than it was before in this game");
+            return;
+          }
+          else {
+            roomToPlayersWithSocketIdsMap[room][playerIndex].connected = true;
+            roomToPlayersWithSocketIdsMap[room][playerIndex].socketId = socket.id;
+            console.log("allowed to rejoin, updated info");
+            console.log(roomToPlayersWithSocketIdsMap[room])
+          }
+        }
+        else {
+          console.log("Game wasnt started!");
+          if (roomToPlayersWithSocketIdsMap[room]) {
+            roomToPlayersWithSocketIdsMap[room].push({ playerName: playerName, socketId: socket.id, connected: true })
+          }
+          else {
+            roomToPlayersWithSocketIdsMap[room] = [{ playerName: playerName, socketId: socket.id, connected: true }]
+          }
+          console.log(roomToPlayersWithSocketIdsMap[room]);
+        }
+
         socket.join(room, () => {
           // If the clients before the new socket joined were 3 - then max number reached, begin playing.
           if (clients.length == 3) {
-            // ready to begin domino. Shuffle and assign pieces to players.
             let updatedClients = clients;
             updatedClients.push(socket.id);
+            if (roomToPropertiesMap[room] && roomToPropertiesMap[room].gameWasStartedBefore) {
+              console.log("setting gamestarted before to true")
+              console.log(roomToPlayersWithSocketIdsMap[room]);
+              console.log(roomToPropertiesMap[room]);
+              io.to(socket.rooms[room]).emit('BeginDomino', {
+                teams: roomToPropertiesMap[room].teams,
+                playerToStart: roomToPropertiesMap[room].playerTurnOrder[0]
+              });
 
-            roomToPropertiesMap[room] = {
-              board: [],
-              piecesInPlayerHands: [],
-              piecesToGive: [],
-              playerTurnOrder: [],
-              nextPlayer: 0,
-              nextClientToStartRound: 0,
-              roundNumber: 0,
-              listOfReadyUpSockets: {},
-              teams: {}
             }
+            else {
+              console.log("room to players with socketIdsMap");
+              console.log(roomToPlayersWithSocketIdsMap[room]);
 
-            CreateDominoPieces(updatedClients, room);
-            CreatePlayerTurnOrder(room);
-            console.log(roomToPropertiesMap[room].teams);
-            io.to(socket.rooms[room]).emit('BeginDomino', {
-              teams: roomToPropertiesMap[room].teams,
-              playerToStart: roomToPropertiesMap[room].playerTurnOrder[0]
-            });
+              roomToPropertiesMap[room] = {
+                board: [],
+                piecesInPlayerHands: [],
+                piecesToGive: [],
+                playerTurnOrder: [],
+                nextPlayer: 0,
+                nextClientToStartRound: 0,
+                roundNumber: 0,
+                listOfReadyUpSockets: {},
+                teams: {},
+                gameWasStartedBefore: true
+              }
+
+              CreateDominoPieces(updatedClients, room);
+              CreatePlayerTurnOrder(room);
+              console.log(roomToPropertiesMap[room].teams);
+              io.to(socket.rooms[room]).emit('BeginDomino', {
+                teams: roomToPropertiesMap[room].teams,
+                playerToStart: roomToPropertiesMap[room].playerTurnOrder[0]
+              });
+            }
           }
         });
       }
@@ -99,6 +156,23 @@ io.on("connection", socket => {
     });
   });
 
+  socket.on('disconnecting', (reason) => {
+    let room = Object.keys(socket.rooms)[1];
+    console.log("socket disconnected man!");
+    console.log("==== socket ==== ")
+    console.log(socket.id);
+    console.log("=====")
+    console.log(roomToPropertiesMap[room]);
+    console.log("===== players")
+    console.log(roomToPlayersWithSocketIdsMap[room]);
+
+    if (roomToPlayersWithSocketIdsMap[room]) {
+      let playerIndex = roomToPlayersWithSocketIdsMap[room].findIndex(playerToSocket => playerToSocket.socketId == socket.id);
+      roomToPlayersWithSocketIdsMap[room][playerIndex].connected = false;
+      console.log(roomToPlayersWithSocketIdsMap[room]);
+    }
+  });
+
   socket.on("ReadyUp", (socketId) => {
     let room = Object.keys(socket.rooms)[1];
     if (roomToPropertiesMap[room].listOfReadyUpSockets[socketId]) {
@@ -114,12 +188,13 @@ io.on("connection", socket => {
           board: [],
           piecesInPlayerHands: [],
           piecesToGive: [],
-          nextPlayer: 0,
+          nextPlayer: roomToPropertiesMap[room].nextPlayer + 1,
           listOfReadyUpSockets: {},
           nextClientToStartRound: roomToPropertiesMap[room].nextClientToStartRound + 1,
           roundNumber: roomToPropertiesMap[room].roundNumber + 1,
           teams: roomToPropertiesMap[room].teams,
-          playerTurnOrder: roomToPropertiesMap[room].playerTurnOrder
+          playerTurnOrder: roomToPropertiesMap[room].playerTurnOrder,
+          gameWasStartedBefore: true
         }
 
         console.log(roomToPropertiesMap[room]);
@@ -292,7 +367,7 @@ function CreateDominoPieces(clients, room) {
       teamNumber++;
     }
     teamIncrement++;
-    shuffledArray[i].Owner = clients[clientIndex];
+    shuffledArray[i].Owner = roomToPlayersWithSocketIdsMap[room][clientIndex].playerName;
     shuffledArray[i].Team = teamNumber;
   }
 

@@ -17,6 +17,7 @@ class App extends Component {
       joinedRoom: false,
       teams: {},
       playerToStart: null,
+      playerName: ""
     };
   }
   componentDidMount() {
@@ -27,16 +28,19 @@ class App extends Component {
 
   handleChange = (event) => {
     this.setState({ roomToJoin: event.target.value });
+  }
 
+  handleChangePlayerName = (event) => {
+    this.setState({ playerName: event.target.value });
   }
 
   handleSubmit = (event) => {
-    if (this.state.roomToJoin == "") {
-      alert("cannot join an empty room code");
+    if (this.state.roomToJoin == "" || this.state.playerName == "") {
+      alert("Please enter a non-empty room and a non-empty player name");
       event.preventDefault();
       return;
     }
-    socket.emit("join", this.state.roomToJoin); // maybe not the best place (What if refresh)
+    socket.emit("join", this.state.roomToJoin, this.state.playerName); // maybe not the best place (What if refresh)
     console.log("You just joined this room: " + this.state.roomToJoin);
     this.setState({ joinedRoom: true });
     event.preventDefault();
@@ -44,13 +48,12 @@ class App extends Component {
 
   render() {
     if (this.state.isDomino && this.state.teams != {}) {
-      return <Domino socket={socket} teams={this.state.teams} playerToStart={this.state.playerToStart} />
+      return <Domino socket={socket} teams={this.state.teams} playerToStart={this.state.playerToStart} playerName={this.state.playerName} />
     }
     return (
       <div className="App">
         <header className="App-header">
           <img src={logo} className="App-logo" alt="logo" />
-          <button onClick={this.createRoom}>Click to create and join a room</button>
           <form onSubmit={this.handleSubmit}>
             <label>
               Join a room:
@@ -58,18 +61,16 @@ class App extends Component {
             </label>
             <input type="submit" value="Submit" />
           </form>
+          <label>
+            Please enter your username
+            (if disconnected from an existing game, please choose the same username)
+              <input type="text" value={this.state.playerName} onChange={this.handleChangePlayerName} />
+          </label>
           {this.state.joinedRoom && <p>Waiting for more people to join room: {this.state.roomToJoin}</p>}
         </header>
       </div >
     );
   }
-
-  createRoom = () => {
-    let roomCode = Math.random().toString(36).substr(2, 10);
-    socket.emit("join", roomCode); // maybe not the best place (What if refresh)
-    console.log(roomCode);
-  }
-
 }
 
 export default App;
