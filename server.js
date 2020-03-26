@@ -44,11 +44,38 @@ expressApp.get('/pieces', function (request, response) {
     let room = Object.keys(rooms)[1];
     let userIndex = roomToPlayersWithSocketIdsMap[room].findIndex(rtp => rtp.socketId == socketId);
     let user = roomToPlayersWithSocketIdsMap[room][userIndex].playerName
-    response.send(roomToPropertiesMap[room].piecesToGive.filter(piece => piece.Owner == user));
+    if (roomToPropertiesMap[room] && roomToPropertiesMap[room].piecesToGive) {
+      response.send(roomToPropertiesMap[room].piecesToGive.filter(piece => piece.Owner == user));
+    }
+    else {
+      response.send([]);
+    }
   }
   else {
     // handle this in the ux. Basically we could not find the socket
-    response.sendStatus(500);
+    response.status(404).send("Could not get socket id in room")
+  }
+});
+
+// Gets the board by the client id (used to get the room)
+// This should be used as /board?clientId=<clientid>
+expressApp.get('/board', function (request, response) {
+  console.log("attempting to get the board");
+  let socketId = request.query["clientId"];
+  let socket = io.sockets.sockets[socketId];
+  if (socket) {
+    let rooms = socket.rooms;
+    let room = Object.keys(rooms)[1];
+    if (roomToPropertiesMap[room] && roomToPropertiesMap[room].board) {
+      response.send(roomToPropertiesMap[room].board);
+    }
+    else {
+      response.send([]);
+    }
+  }
+  else {
+    // handle this in the ux. Basically we could not find the socket
+    response.status(404).send("Could not get socket id in room")
   }
 });
 

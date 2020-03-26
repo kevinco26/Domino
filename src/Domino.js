@@ -15,6 +15,12 @@ class Domino extends Component {
         };
     }
     componentDidMount() {
+
+        if (this.state.board.length == 0) {
+            // initial refresh of board
+            this.getBoard()
+        }
+
         // whenever we receive the refresh board event from server, update the local's board state
         this.props.socket.on("RefreshBoard", (data) => {
             console.log("Board was refreshed. State of the board is:")
@@ -102,6 +108,13 @@ class Domino extends Component {
         axios.get(`/pieces?clientId=${this.props.socket.id}`).then(response => {
             console.log(response);
             this.setState({ pieces: response.data });
+        })
+    }
+
+    getBoard() {
+        axios.get(`/board?clientId=${this.props.socket.id}`).then(response => {
+            console.log(response);
+            this.setState({ board: response.data });
         })
     }
 
