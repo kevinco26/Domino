@@ -10,7 +10,7 @@ class Domino extends Component {
             board: [],
             currentPlayingPiece: {},
             nextPlayer: null,
-            roundOver: true,
+            roundOver: false,
             roundNumber: 0
         };
     }
