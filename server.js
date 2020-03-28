@@ -1,5 +1,4 @@
 // Setting up variables
-
 var express = require('express');
 var expressApp = express();
 var httpServer = require("http").Server(expressApp);
@@ -26,7 +25,6 @@ expressApp.get('/', (req, res) => {
   res.sendFile(path.join(__dirname + '/build/index.html'))
 })
 
-
 expressApp.use(function (req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
@@ -36,7 +34,6 @@ expressApp.use(function (req, res, next) {
 // Gets the pieces for the specified user in the query. 
 // This should be used as /pieces?clientId=<clientid>
 expressApp.get('/pieces', function (request, response) {
-  console.log("attempting to get pieces");
   let socketId = request.query["clientId"];
   let socket = io.sockets.sockets[socketId];
   if (socket) {
@@ -60,7 +57,6 @@ expressApp.get('/pieces', function (request, response) {
 // Gets the board by the client id (used to get the room)
 // This should be used as /board?clientId=<clientid>
 expressApp.get('/board', function (request, response) {
-  console.log("attempting to get the board");
   let socketId = request.query["clientId"];
   let socket = io.sockets.sockets[socketId];
   if (socket) {
@@ -84,14 +80,12 @@ io.on("connection", socket => {
   console.log(socket.id);
 
   socket.on('join', (room, playerName) => {
-    console.log(room);
     var user = io.in(room).clients((err, clients) => {
       // If there are already 4 sockets in a room, do not let the new socket join.
-      console.log("Trying to join room!!!!");
-      console.log("Clients:");
-      console.log(clients);
-      console.log("Error");
-      console.log(err);
+      if (err) {
+        console.log("Error when joining");
+        console.log(err);
+      }
       if (clients.length > 3) { //(0,1,2,3)
         console.log("Sorry this room is full");
         // should throw error al ux..  oh okay this is full
@@ -123,7 +117,6 @@ io.on("connection", socket => {
           else {
             roomToPlayersWithSocketIdsMap[room] = [{ playerName: playerName, socketId: socket.id, connected: true }]
           }
-          console.log(roomToPlayersWithSocketIdsMap[room]);
         }
 
         socket.join(room, () => {
@@ -142,8 +135,6 @@ io.on("connection", socket => {
 
             }
             else {
-              console.log("room to players with socketIdsMap");
-              console.log(roomToPlayersWithSocketIdsMap[room]);
 
               roomToPropertiesMap[room] = {
                 board: [],
@@ -160,7 +151,6 @@ io.on("connection", socket => {
 
               CreateDominoPieces(updatedClients, room);
               CreatePlayerTurnOrder(room);
-              console.log(roomToPropertiesMap[room].teams);
               io.to(socket.rooms[room]).emit('BeginDomino', {
                 teams: roomToPropertiesMap[room].teams,
                 playerToStart: roomToPropertiesMap[room].playerTurnOrder[0]
@@ -175,20 +165,24 @@ io.on("connection", socket => {
   socket.on("Pass", () => {
     // For now, one socket per room. Object.keys(socket.rooms) -> [socketId, room]
     let room = Object.keys(socket.rooms)[1];
-    roomToPropertiesMap[room].nextPlayer++;
-    io.to(socket.rooms[room]).emit("RefreshBoard", {
-      board: roomToPropertiesMap[room].board,
-      pieceIntroduced: null,
-      nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4]
-    });
+    if (roomToPropertiesMap[room]) {
+      roomToPropertiesMap[room].nextPlayer++;
+      io.to(socket.rooms[room]).emit("RefreshBoard", {
+        board: roomToPropertiesMap[room].board,
+        pieceIntroduced: null,
+        nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4]
+      });
+    }
+    else {
+      console.log("Room to properties map is undefined when trying to Pass....");
+    }
   });
 
   socket.on('disconnecting', (reason) => {
     let room = Object.keys(socket.rooms)[1];
-    console.log("socket disconnected man!");
-    console.log("==== socket ==== ")
+    console.log("==== Disconnected socket ==== ")
     console.log(socket.id);
-    console.log("=====")
+    console.log("===== room to properties map variable")
     console.log(roomToPropertiesMap[room]);
     console.log("===== players")
     console.log(roomToPlayersWithSocketIdsMap[room]);
@@ -202,6 +196,10 @@ io.on("connection", socket => {
 
   socket.on("ReadyUp", (socketId) => {
     let room = Object.keys(socket.rooms)[1];
+    if (!roomToPropertiesMap[room]) {
+      console.log("Room to properties map is not defined..");
+      return;
+    }
     if (roomToPropertiesMap[room].listOfReadyUpSockets[socketId]) {
       console.log("already readied up")
     }
@@ -215,7 +213,7 @@ io.on("connection", socket => {
           board: [],
           piecesInPlayerHands: [],
           piecesToGive: [],
-          nextPlayer: roomToPropertiesMap[room].nextPlayer + 1,
+          nextPlayer: roomToPropertiesMap[room].nextClientToStartRound + 1,
           listOfReadyUpSockets: {},
           nextClientToStartRound: roomToPropertiesMap[room].nextClientToStartRound + 1,
           roundNumber: roomToPropertiesMap[room].roundNumber + 1,
@@ -224,8 +222,12 @@ io.on("connection", socket => {
           gameWasStartedBefore: true
         }
 
-        console.log(roomToPropertiesMap[room]);
+        console.log("Next player to play!!!");
+        console.log(roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextClientToStartRound % 4]);
+        console.log("Nexg player! Updated");
+        console.log(roomToPropertiesMap[room].nextPlayer);
 
+        console.log("Round number: " + roomToPropertiesMap[room].roundNumber)
         CreateDominoPieces(arrayClients, room);
         io.to(socket.rooms[room]).emit("BeginNewRound", {
           board: roomToPropertiesMap[room].board,
@@ -263,14 +265,11 @@ io.on("connection", socket => {
   // si tenemos un 5|4, halfpiece nos va a decir si queremos jugar el 5 o el 4
   socket.on("PlayPiece", (piece, halfPiece) => {
     let room = Object.keys(socket.rooms)[1];
-    console.log("received piece:");
-    console.log(piece.top.value + "|" + piece.bottom.value);
 
-    // first time, halfPiece is null
-    if (halfPiece != null)
-      console.log("Desired to put it on: " + halfPiece.value);
-
-    // need to figure out how to put it in the right array order maybe...?
+    if (!roomToPropertiesMap[room]) {
+      console.log("Room to properties map is undefined in PlayPiece");
+      return;
+    }
     // If starting, push it at the beginning
     if (roomToPropertiesMap[room].board.length == 0) {
       piece.top.open = true;
@@ -280,7 +279,6 @@ io.on("connection", socket => {
     // if second piece is going to be played (board has 1 piece)
     else {
       if (piece.top.value == halfPiece.value) {
-        console.log(halfPiece.direction)
         // this case is 6 | 6 on the board and i have 6 | 1
         if (halfPiece.direction == "right") {
           // I clicked on the left so I just need to put the 1 | 6 at the left of the board.
@@ -289,7 +287,6 @@ io.on("connection", socket => {
         }
         else {
           // I clicked on the right. so I need to invert the 1 |  6 so that its 6| 6 - 6 | 1
-          console.log("invert");
           var tempTop = piece.top;
           piece.top = piece.bottom;
           piece.bottom = tempTop;
@@ -297,11 +294,9 @@ io.on("connection", socket => {
         }
       }
       else if (piece.bottom.value == halfPiece.value) {
-        console.log(halfPiece.direction)
         // this case is 6 | 6 on the board and i have 1|6
         if (halfPiece.direction == "right") {
           // I clicked on the right. so I need to invert the 1 |  6 so that its 6| 6 - 6 | 1
-          console.log("invert");
           var tempTop = piece.top;
           piece.top = piece.bottom;
           piece.bottom = tempTop;
@@ -332,6 +327,11 @@ io.on("connection", socket => {
 function GetScores(room) {
   let scoreTeam1 = 0;
   let scoreTeam2 = 0;
+  if (!roomToPropertiesMap[room]) {
+    console.log("Room to propertiesmap is undefined when getting scores");
+    return {};
+  }
+
   roomToPropertiesMap[room].piecesInPlayerHands.forEach((p) => {
     if (p.Team == 1) {
       scoreTeam1 += p.top.value + p.bottom.value;
@@ -374,8 +374,8 @@ function SetOpenEndsOnBoard(board) {
   });
   board[0].top.open = true;
   board[board.length - 1].bottom.open = true;
-
 }
+
 function CreateDominoPieces(clients, room) {
   // create the pieces.
   let piecesDealt = ConstructInitialPiecesArray();
@@ -400,7 +400,6 @@ function CreateDominoPieces(clients, room) {
 
   roomToPropertiesMap[room].piecesToGive = shuffledArray;
   roomToPropertiesMap[room].piecesInPlayerHands = shuffledArray;
-
   console.log(shuffledArray);
 }
 

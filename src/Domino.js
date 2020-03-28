@@ -10,7 +10,7 @@ class Domino extends Component {
             board: [],
             currentPlayingPiece: {},
             nextPlayer: null,
-            roundOver: false,
+            roundOver: true,
             roundNumber: 0
         };
     }
@@ -75,7 +75,10 @@ class Domino extends Component {
             <div className="App">
                 Hello and welcome to the Domino Board.
                 You are in team: {this.props.teams[this.props.playerName]}
+                <br></br>
                 Your name: {this.props.playerName}
+                <br></br>
+                {this.state.nextPlayer && <p>It's {this.state.nextPlayer}'s turn</p>}
                 {this.props.playerName == this.state.nextPlayer && <p>It's your turn</p>}
                 <br></br>
                 {this.state.pieces.length == 0 && <button onClick={this.getPieces}>Click to get pieces</button>}
@@ -118,6 +121,23 @@ class Domino extends Component {
         })
     }
 
+    canPlayerPass() {
+        let leftOpenEnd = this.state.board[0].top.value;
+        let rightOpenEnd = this.state.board[this.state.board.length - 1].bottom.value;
+        console.log("left open end: " + leftOpenEnd);
+        console.log("right open end: " + rightOpenEnd);
+
+        let pieceIndex = this.state.pieces.findIndex(p =>
+            (p.top.value == leftOpenEnd || p.bottom.value == leftOpenEnd) ||
+            (p.top.value == rightOpenEnd || p.bottom.value == rightOpenEnd));
+        if (pieceIndex != -1) {
+            console.log("Cannot pass, you can play a piece!")
+            console.log(this.state.pieces[pieceIndex]);
+            return false;
+        }
+        return true;
+    }
+
     endRound = () => {
         this.props.socket.emit("endRound", this.props.teams[this.props.playerName]);
     }
@@ -125,7 +145,20 @@ class Domino extends Component {
     noAvailableMoves = () => {
         // check if the player really can't pass... 
         // also check if its the player's turn.. maybe we can put this button only if its the player's turn
-        this.props.socket.emit("Pass")
+        if (this.state.nextPlayer == null && this.props.playerToStart != this.props.playerName) {
+            console.log("Cannot play because its not your turn");
+            return;
+        }
+        else if (this.state.nextPlayer != null && this.state.nextPlayer != this.props.playerName) {
+            console.log("Cannot play because its not your turn");
+            return;
+        }
+        if (this.canPlayerPass()) {
+            this.props.socket.emit("Pass")
+        }
+        else {
+            console.log("cannot pass because you have available moves")
+        }
     }
 
     playPiece = (piece) => {
