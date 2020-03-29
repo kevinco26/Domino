@@ -427,3 +427,39 @@ function shuffle(array) {
   }
   return array;
 }
+
+
+//Function that returns true if the game is trancated
+function partidaTrancated(board){
+  //Variables para agarrar las esquinas abiert
+  let esquinaIzq = board[0].top.value;
+  let esquinaDer = board[board.length-1].bottom.value;
+
+  //variable que cuenta piezas del mismo numero
+  let temp =0;
+  if(esquinaIzq==esquinaDer){
+    board.forEach(piece => {
+      if(piece.top.value==esquinaIzq || piece.bottom.value==esquinaIzq){
+        temp++;
+      }
+
+
+    });
+
+    if(temp ==7){
+      console.log ("se Tranco La partida");
+      return true;
+    }
+
+    else{
+      //No se tranco la partida... Quedan piezas posibles
+      console.log("No esta trancada la partida");
+      return false;
+    }
+  }
+  else{
+    console.log ("No esta trancada");
+    return false;
+  }
+}
+
