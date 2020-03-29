@@ -318,13 +318,15 @@ io.on("connection", socket => {
 
     roomToPropertiesMap[room].nextPlayer++;
     SetOpenEndsOnBoard(roomToPropertiesMap[room].board);
+    let tranque = partidaTrancated(roomToPropertiesMap[room].board);
 
     // Updaet the current pieces that are in the player's hands
     roomToPropertiesMap[room].piecesInPlayerHands.splice(roomToPropertiesMap[room].piecesInPlayerHands.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value)), 1);
     io.to(socket.rooms[room]).emit("RefreshBoard", {
       board: roomToPropertiesMap[room].board,
       pieceIntroduced: piece,
-      nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4]
+      nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4],
+      isTrancated: tranque
     });
   });
 });

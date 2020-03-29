@@ -27,7 +27,7 @@ class Domino extends Component {
             console.log(data.board);
             console.log("Piece that got introduced was:");
             console.log(data.pieceIntroduced);
-
+            console.log("Esta Trancado: " +data.isTrancated);    
             this.removeUserPiece(data.pieceIntroduced);
             this.setState({ board: data.board, nextPlayer: data.nextPlayer });
         });
