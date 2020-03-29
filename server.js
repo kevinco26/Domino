@@ -313,13 +313,15 @@ io.on("connection", socket => {
 
     roomToPropertiesMap[room].nextPlayer++;
     SetOpenEndsOnBoard(roomToPropertiesMap[room].board);
+    let tranque = partidaTrancated(roomToPropertiesMap[room].board);
 
     // Updaet the current pieces that are in the player's hands
     roomToPropertiesMap[room].piecesInPlayerHands.splice(roomToPropertiesMap[room].piecesInPlayerHands.findIndex(p => (p.top.value == piece.top.value && p.bottom.value == piece.bottom.value) || (p.top.value == piece.bottom.value && p.bottom.value == piece.top.value)), 1);
     io.to(socket.rooms[room]).emit("RefreshBoard", {
       board: roomToPropertiesMap[room].board,
       pieceIntroduced: piece,
-      nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4]
+      nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4],
+      isTrancated: tranque
     });
   });
 });
@@ -426,3 +428,39 @@ function shuffle(array) {
   }
   return array;
 }
+
+
+//Function that returns true if the game is trancated
+function partidaTrancated(board){
+  //Variables para agarrar las esquinas abiert
+  let esquinaIzq = board[0].top.value;
+  let esquinaDer = board[board.length-1].bottom.value;
+
+  //variable que cuenta piezas del mismo numero
+  let temp =0;
+  if(esquinaIzq==esquinaDer){
+    board.forEach(piece => {
+      if(piece.top.value==esquinaIzq || piece.bottom.value==esquinaIzq){
+        temp++;
+      }
+
+
+    });
+
+    if(temp ==7){
+      console.log ("se Tranco La partida");
+      return true;
+    }
+
+    else{
+      //No se tranco la partida... Quedan piezas posibles
+      console.log("No esta trancada la partida");
+      return false;
+    }
+  }
+  else{
+    console.log ("No esta trancada");
+    return false;
+  }
+}
+
