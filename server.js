@@ -75,6 +75,27 @@ expressApp.get('/board', function (request, response) {
   }
 });
 
+// Gets if the round is over by the client id (used to get the room)
+// This should be used as /isRoundOver?clientId=<clientid>
+expressApp.get('/isRoundOver', function (request, response) {
+  let socketId = request.query["clientId"];
+  let socket = io.sockets.sockets[socketId];
+  if (socket) {
+    let rooms = socket.rooms;
+    let room = Object.keys(rooms)[1];
+    if (roomToPropertiesMap[room]) {
+      response.send({ isRoundOver: roomToPropertiesMap[room].isRoundOver, team1Score: roomToPropertiesMap[room].team1Score, team2Score: roomToPropertiesMap[room].team2Score });
+    }
+    else {
+      response.status(404).send("Could not determine if round is over")
+    }
+  }
+  else {
+    // handle this in the ux. Basically we could not find the socket
+    response.status(404).send("Could not get socket id in room")
+  }
+});
+
 io.on("connection", socket => {
   console.log("Socket connected:");
   console.log(socket.id);
@@ -146,7 +167,10 @@ io.on("connection", socket => {
                 roundNumber: 0,
                 listOfReadyUpSockets: {},
                 teams: {},
-                gameWasStartedBefore: true
+                gameWasStartedBefore: true,
+                isRoundOver: false,
+                team1Score: 0,
+                team2Score: 0
               }
 
               CreateDominoPieces(updatedClients, room);
@@ -219,7 +243,10 @@ io.on("connection", socket => {
           roundNumber: roomToPropertiesMap[room].roundNumber + 1,
           teams: roomToPropertiesMap[room].teams,
           playerTurnOrder: roomToPropertiesMap[room].playerTurnOrder,
-          gameWasStartedBefore: true
+          gameWasStartedBefore: true,
+          isRoundOver: false,
+          team1Score: 0,
+          team2Score: 0,
         }
 
         console.log("Next player to play!!!");
@@ -248,11 +275,11 @@ io.on("connection", socket => {
     // If no team won (this api will have winningTeam = 0 or null, TBD) then return the scores of both teams as we need to add them to both
     // We are not storing scores yet.. this is for the ux para que por ahora nosotros lo anotemos
 
-    if (winningTeam == 1) {
-      finalScores["team1"] = 0;
-    }
-    if (winningTeam == 2) {
-      finalScores["team2"] = 0;
+    // store que se acabo la partida
+    if (roomToPropertiesMap[room]) {
+      roomToPropertiesMap[room].isRoundOver = true;
+      roomToPropertiesMap[room].team1Score = finalScores["team1"];
+      roomToPropertiesMap[room].team2Score = finalScores["team2"];
     }
 
     io.to(socket.rooms[room]).emit("RoundOver", {
@@ -431,35 +458,32 @@ function shuffle(array) {
 
 
 //Function that returns true if the game is trancated
-function partidaTrancated(board){
+function partidaTrancated(board) {
   //Variables para agarrar las esquinas abiert
   let esquinaIzq = board[0].top.value;
-  let esquinaDer = board[board.length-1].bottom.value;
+  let esquinaDer = board[board.length - 1].bottom.value;
 
   //variable que cuenta piezas del mismo numero
-  let temp =0;
-  if(esquinaIzq==esquinaDer){
+  let temp = 0;
+  if (esquinaIzq == esquinaDer) {
     board.forEach(piece => {
-      if(piece.top.value==esquinaIzq || piece.bottom.value==esquinaIzq){
+      if (piece.top.value == esquinaIzq || piece.bottom.value == esquinaIzq) {
         temp++;
       }
 
 
     });
 
-    if(temp ==7){
-      console.log ("se Tranco La partida");
+    if (temp == 7) {
       return true;
     }
 
-    else{
+    else {
       //No se tranco la partida... Quedan piezas posibles
-      console.log("No esta trancada la partida");
       return false;
     }
   }
-  else{
-    console.log ("No esta trancada");
+  else {
     return false;
   }
 }
