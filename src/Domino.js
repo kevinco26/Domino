@@ -11,40 +11,43 @@ class Domino extends Component {
             currentPlayingPiece: {},
             nextPlayer: null,
             roundOver: false,
-            roundNumber: 0
+            roundNumber: 0,
+            isRoundTrancated: false,
+            team1Score: 0,
+            team2Score: 0,
         };
     }
     componentDidMount() {
 
         if (this.state.board.length == 0) {
             // initial refresh of board
-            this.getBoard()
+            this.getBoard();
         }
+
+        // refresh is round over
+        this.getIfRoundIsOverFromServer();
 
         // whenever we receive the refresh board event from server, update the local's board state
         this.props.socket.on("RefreshBoard", (data) => {
-            console.log("Board was refreshed. State of the board is:")
-            console.log(data.board);
-            console.log("Piece that got introduced was:");
-            console.log(data.pieceIntroduced);
-            console.log("Esta Trancado: " +data.isTrancated);    
+
             this.removeUserPiece(data.pieceIntroduced);
             this.setState({ board: data.board, nextPlayer: data.nextPlayer });
+            if (data.isTrancated) {
+                // 0 is not a team, meaning it was un tranque
+                this.endRound(0);
+                this.setState({ isRoundTrancated: true });
+                return;
+            }
+
         });
 
         this.props.socket.on("BeginNewRound", (data) => {
-            this.setState({ board: data.board, nextPlayer: data.playerToStart, pieces: [], currentPlayingPiece: {}, roundOver: false, roundNumber: data.roundNumber });
+            this.setState({ board: data.board, nextPlayer: data.playerToStart, pieces: [], currentPlayingPiece: {}, roundOver: false, roundNumber: data.roundNumber, isRoundTrancated: false });
 
         });
 
         this.props.socket.on("RoundOver", (data) => {
-            let losingTeamScore = data.winningTeam == 1 ? data.scores["team2"] : data.scores["team1"];
-            if (this.props.teams[this.props.playerName] == data.winningTeam) {
-                alert("You and your teammate won this round! your oppoinent's score:" + losingTeamScore);
-            }
-            else {
-                alert("You and your teammate lost this round! your score:" + losingTeamScore);
-            }
+            this.setState({ team1Score: data.scores["team1"], team2Score: data.scores["team2"] })
 
             // flag round is over.
             this.setState({ roundOver: true });
@@ -67,7 +70,8 @@ class Domino extends Component {
             console.log("piece removed")
         }
         if (this.state.pieces.length === 0) {
-            this.endRound();
+            // At this point, this current player just won so call endround function with this' player's team number
+            this.endRound(this.props.teams[this.props.playerName]);
         }
     }
     render() {
@@ -87,7 +91,7 @@ class Domino extends Component {
                 <br></br>
                 Your pieces are: {
                     this.state.pieces.map((piece) => <li><button onClick={this.playPiece.bind(this, piece)}>{piece.top.value} | {piece.bottom.value}</button></li>)}
-
+                {this.state.roundOver && <p>Round over! Round's scores{this.state.isRoundTrancated && <p>(Locked game)</p>} Team 1 score: {this.state.team1Score}. Team 2 score: {this.state.team2Score} </p>}
                 <div style={{ marginTop: "50px" }}>
                     The board: <br></br> <br></br>
                     {
@@ -121,6 +125,13 @@ class Domino extends Component {
         })
     }
 
+    getIfRoundIsOverFromServer() {
+        axios.get(`/isRoundOver?clientId=${this.props.socket.id}`).then(response => {
+            console.log(response);
+            this.setState({ roundOver: response.data.isRoundOver, team1Score: response.data.team1Score, team2Score: response.data.team2Score });
+        })
+    }
+
     canPlayerPass() {
         let leftOpenEnd = this.state.board[0].top.value;
         let rightOpenEnd = this.state.board[this.state.board.length - 1].bottom.value;
@@ -138,8 +149,8 @@ class Domino extends Component {
         return true;
     }
 
-    endRound = () => {
-        this.props.socket.emit("endRound", this.props.teams[this.props.playerName]);
+    endRound = (winningTeam) => {
+        this.props.socket.emit("endRound", winningTeam);
     }
 
     noAvailableMoves = () => {
