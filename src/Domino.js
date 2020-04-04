@@ -97,9 +97,7 @@ class Domino extends Component {
                     {
                         this.state.board.map(function (piece) {
                             //Use style from classes
-                            console.log(piece);
                             var isDouble = piece.top.value === piece.bottom.value;
-                            console.log(isDouble)
                             return (
                                 // probably a better way of handling the white space
                                 <button style={isDouble ? { marginRight: "-20px", marginLeft: "-20px", transform: "rotate(90deg)" } : { marginRight: "1px", marginLeft: "1px" }} disabled={true}>
