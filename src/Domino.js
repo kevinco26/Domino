@@ -104,11 +104,11 @@ class Domino extends Component {
                                 // probably a better way of handling the white space
                                 <button style={isDouble ? { marginRight: "-20px", marginLeft: "-20px", transform: "rotate(90deg)" } : { marginRight: "1px", marginLeft: "1px" }} disabled={true}>
                                     <button style={isDouble ? { transform: "rotate(-90deg)", } : {}} onClick={this.playPieceOnBoard.bind(this, piece.top, "left")}>
-                                        {piece.top.value}
+                                        <span style={piece.top.open ? { color: "#2fd44b" } : {}}>{piece.top.value}</span>
                                     </button>
                                     |
                                     <button style={isDouble ? { transform: "rotate(-90deg)", } : {}} onClick={this.playPieceOnBoard.bind(this, piece.bottom, "right")}>
-                                        {piece.bottom.value}
+                                        <span style={piece.bottom.open ? { color: "#2fd44b" } : {}}>{piece.bottom.value}</span>
                                     </button>
                                 </button>)
                         }, this)
