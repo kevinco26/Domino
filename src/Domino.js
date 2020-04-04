@@ -77,7 +77,7 @@ class Domino extends Component {
     render() {
         return (
             <div className="App">
-                Hello and welcome to the Domino Board.
+                Hello and welcome to the Domino Board. &#127114;
                 You are in team: {this.props.teams[this.props.playerName]}
                 <br></br>
                 Your name: {this.props.playerName}
@@ -92,10 +92,26 @@ class Domino extends Component {
                 Your pieces are: {
                     this.state.pieces.map((piece) => <li><button onClick={this.playPiece.bind(this, piece)}>{piece.top.value} | {piece.bottom.value}</button></li>)}
                 {this.state.roundOver && <p>Round over! Round's scores{this.state.isRoundTrancated && <p>(Locked game)</p>} Team 1 score: {this.state.team1Score}. Team 2 score: {this.state.team2Score} </p>}
-                <div style={{ marginTop: "50px" }}>
-                    The board: <br></br> <br></br>
+                <div style={{ marginTop: "25px" }}>
+                    The board: <br></br> <br></br><br></br><br></br>
                     {
-                        this.state.board.map((piece) => <button style={{ marginRight: "1px", marginLeft: "1px" }} disabled={true}><button onClick={this.playPieceOnBoard.bind(this, piece.top, "left")}>{piece.top.value}</button> | <button onClick={this.playPieceOnBoard.bind(this, piece.bottom, "right")}>{piece.bottom.value}</button></button>)
+                        this.state.board.map(function (piece) {
+                            //Use style from classes
+                            console.log(piece);
+                            var isDouble = piece.top.value === piece.bottom.value;
+                            console.log(isDouble)
+                            return (
+                                // probably a better way of handling the white space
+                                <button style={isDouble ? { marginRight: "-20px", marginLeft: "-20px", transform: "rotate(90deg)" } : { marginRight: "1px", marginLeft: "1px" }} disabled={true}>
+                                    <button style={isDouble ? { transform: "rotate(-90deg)", } : {}} onClick={this.playPieceOnBoard.bind(this, piece.top, "left")}>
+                                        {piece.top.value}
+                                    </button>
+                                    |
+                                    <button style={isDouble ? { transform: "rotate(-90deg)", } : {}} onClick={this.playPieceOnBoard.bind(this, piece.bottom, "right")}>
+                                        {piece.bottom.value}
+                                    </button>
+                                </button>)
+                        }, this)
                     }
                 </div>
                 <div style={{ marginTop: "50px" }}>
