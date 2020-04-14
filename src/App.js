@@ -48,7 +48,7 @@ class App extends Component {
 
   render() {
     if (this.state.isDomino && this.state.teams != {}) {
-      return <Domino socket={socket} teams={this.state.teams} playerToStart={this.state.playerToStart} playerName={this.state.playerName} />
+      return <Domino roomToJoin={this.state.roomToJoin} socket={socket} teams={this.state.teams} playerToStart={this.state.playerToStart} playerName={this.state.playerName} />
     }
     return (
       <div className="App">

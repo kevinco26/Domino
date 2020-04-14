@@ -39,9 +39,9 @@ expressApp.get('/pieces', function (request, response) {
   if (socket) {
     let rooms = socket.rooms;
     let room = Object.keys(rooms)[1];
-    let userIndex = roomToPlayersWithSocketIdsMap[room].findIndex(rtp => rtp.socketId == socketId);
-    let user = roomToPlayersWithSocketIdsMap[room][userIndex].playerName
-    if (roomToPropertiesMap[room] && roomToPropertiesMap[room].piecesToGive) {
+    if (roomToPropertiesMap[room] && roomToPropertiesMap[room].piecesToGive && roomToPlayersWithSocketIdsMap[room]) {
+      let userIndex = roomToPlayersWithSocketIdsMap[room].findIndex(rtp => rtp.socketId == socketId);
+      let user = roomToPlayersWithSocketIdsMap[room][userIndex].playerName
       response.send(roomToPropertiesMap[room].piecesToGive.filter(piece => piece.Owner == user));
     }
     else {
@@ -85,6 +85,27 @@ expressApp.get('/isRoundOver', function (request, response) {
     let room = Object.keys(rooms)[1];
     if (roomToPropertiesMap[room]) {
       response.send({ isRoundOver: roomToPropertiesMap[room].isRoundOver, team1Score: roomToPropertiesMap[room].team1Score, team2Score: roomToPropertiesMap[room].team2Score });
+    }
+    else {
+      response.status(404).send("Could not determine if round is over")
+    }
+  }
+  else {
+    // handle this in the ux. Basically we could not find the socket
+    response.status(404).send("Could not get socket id in room")
+  }
+});
+
+// Gets the next player by the client id (used to get the room)
+// This should be used as /nextplayer?clientId=<clientid>
+expressApp.get('/nextPlayer', function (request, response) {
+  let socketId = request.query["clientId"];
+  let socket = io.sockets.sockets[socketId];
+  if (socket) {
+    let rooms = socket.rooms;
+    let room = Object.keys(rooms)[1];
+    if (roomToPropertiesMap[room] && roomToPropertiesMap[room].playerTurnOrder) {
+      response.send({ nextPlayer: roomToPropertiesMap[room].playerTurnOrder[roomToPropertiesMap[room].nextPlayer % 4] });
     }
     else {
       response.status(404).send("Could not determine if round is over")

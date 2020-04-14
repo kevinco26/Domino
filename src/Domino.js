@@ -15,10 +15,11 @@ class Domino extends Component {
             isRoundTrancated: false,
             team1Score: 0,
             team2Score: 0,
+            lastPieceIntroduced: null,
         };
     }
     componentDidMount() {
-
+        console.log(this.props.teams);
         if (this.state.board.length == 0) {
             // initial refresh of board
             this.getBoard();
@@ -27,9 +28,11 @@ class Domino extends Component {
         // refresh is round over
         this.getIfRoundIsOverFromServer();
 
+        this.getNextPlayerFromServer();
+
         // whenever we receive the refresh board event from server, update the local's board state
         this.props.socket.on("RefreshBoard", (data) => {
-
+            this.setState({ lastPieceIntroduced: data.pieceIntroduced });
             this.removeUserPiece(data.pieceIntroduced);
             this.setState({ board: data.board, nextPlayer: data.nextPlayer });
             if (data.isTrancated) {
@@ -42,8 +45,7 @@ class Domino extends Component {
         });
 
         this.props.socket.on("BeginNewRound", (data) => {
-            this.setState({ board: data.board, nextPlayer: data.playerToStart, pieces: [], currentPlayingPiece: {}, roundOver: false, roundNumber: data.roundNumber, isRoundTrancated: false });
-
+            this.setState({ board: data.board, nextPlayer: data.playerToStart, pieces: [], currentPlayingPiece: {}, roundOver: false, roundNumber: data.roundNumber, isRoundTrancated: false, lastPieceIntroduced: null });
         });
 
         this.props.socket.on("RoundOver", (data) => {
@@ -78,13 +80,19 @@ class Domino extends Component {
         return (
             <div className="App">
                 Hello and welcome to the Domino Board. &#127114;
+                <p><span style={{ color: "#2fd44b" }}>Green</span> numbers are available pieces in the board</p>
                 You are in team: {this.props.teams[this.props.playerName]}
+                <br></br>
+                Your teammate is: {this.getTeammate()}
+                <br></br>
+                Room name:{this.props.roomToJoin}
                 <br></br>
                 Your name: {this.props.playerName}
                 <br></br>
-                {this.state.nextPlayer && <p>It's {this.state.nextPlayer}'s turn</p>}
-                {this.props.playerName == this.state.nextPlayer && <p>It's your turn</p>}
+                <span>Round #: {this.state.roundNumber}</span>
                 <br></br>
+                {this.state.nextPlayer && <p>It's {this.state.nextPlayer}'s turn</p>}
+                {this.props.playerName == this.state.nextPlayer && <p><mark>It's your turn</mark></p>}
                 {this.state.pieces.length == 0 && <button onClick={this.getPieces}>Click to get pieces</button>}
                 <br></br>
                 {<button onClick={this.noAvailableMoves}>Click to pass (if no available moves)</button>}
@@ -93,6 +101,9 @@ class Domino extends Component {
                     this.state.pieces.map((piece) => <li><button onClick={this.playPiece.bind(this, piece)}>{piece.top.value} | {piece.bottom.value}</button></li>)}
                 {this.state.roundOver && <p>Round over! Round's scores{this.state.isRoundTrancated && <p>(Locked game)</p>} Team 1 score: {this.state.team1Score}. Team 2 score: {this.state.team2Score} </p>}
                 <div style={{ marginTop: "25px" }}>
+                    <br></br>
+                    {this.state.lastPieceIntroduced && <span style={{ color: "blue" }}>Last played piece: {this.state.lastPieceIntroduced.top.value} | {this.state.lastPieceIntroduced.bottom.value} By: {this.state.lastPieceIntroduced.Owner}  </span>}
+                    <br></br>
                     The board: <br></br> <br></br><br></br><br></br>
                     {
                         this.state.board.map(function (piece) {
@@ -125,32 +136,41 @@ class Domino extends Component {
     }
 
     getPieces = () => {
-        console.log("pieces");
         axios.get(`/pieces?clientId=${this.props.socket.id}`).then(response => {
-            console.log(response);
             this.setState({ pieces: response.data });
         })
     }
 
+    getTeammate() {
+        let teamNumber = this.props.teams[this.props.playerName]
+        for (const [key, value] of Object.entries(this.props.teams)) {
+            if (value == teamNumber && key != this.props.playerName) {
+                return key;
+            }
+        }
+    }
+
     getBoard() {
         axios.get(`/board?clientId=${this.props.socket.id}`).then(response => {
-            console.log(response);
             this.setState({ board: response.data });
         })
     }
 
     getIfRoundIsOverFromServer() {
         axios.get(`/isRoundOver?clientId=${this.props.socket.id}`).then(response => {
-            console.log(response);
             this.setState({ roundOver: response.data.isRoundOver, team1Score: response.data.team1Score, team2Score: response.data.team2Score });
+        })
+    }
+
+    getNextPlayerFromServer() {
+        axios.get(`/nextPlayer?clientId=${this.props.socket.id}`).then(response => {
+            this.setState({ nextPlayer: response.data.nextPlayer });
         })
     }
 
     canPlayerPass() {
         let leftOpenEnd = this.state.board[0].top.value;
         let rightOpenEnd = this.state.board[this.state.board.length - 1].bottom.value;
-        console.log("left open end: " + leftOpenEnd);
-        console.log("right open end: " + rightOpenEnd);
 
         let pieceIndex = this.state.pieces.findIndex(p =>
             (p.top.value == leftOpenEnd || p.bottom.value == leftOpenEnd) ||
@@ -187,9 +207,6 @@ class Domino extends Component {
     }
 
     playPiece = (piece) => {
-        console.log("PLayer that should start");
-        console.log(this.state.nextPlayer);
-        console.log(this.props.playerToStart);
         // we have the playerToStart because the first round/piece does not get emmitted from the server rather passed from the App.js component
         // so we must have this playertostart variable hanging around here.
         if (this.state.nextPlayer == null && this.props.playerToStart != this.props.playerName) {
@@ -222,9 +239,6 @@ class Domino extends Component {
     // halfPiece since we are only passing either the top or the bottom and verifying that the half piece the user clicked is open
     playPieceOnBoard = (halfPiece, direction) => {
         halfPiece.direction = direction;
-        console.log("direction:" + direction);
-        console.log("halfpiece (you clicked) on: ")
-        console.log(halfPiece);
         if (!halfPiece.open) {
             console.log("invalid place to put a piece as the half piece is not open");
             this.setState({ currentPlayingPiece: null });
@@ -234,9 +248,6 @@ class Domino extends Component {
 
             if (this.state.currentPlayingPiece != null &&
                 (this.state.currentPlayingPiece.top.value == halfPiece.value || this.state.currentPlayingPiece.bottom.value == halfPiece.value)) {
-                console.log("You are allowed to play!");
-                console.log("state current playing piece:")
-                console.log(this.state.currentPlayingPiece);
                 this.props.socket.emit("PlayPiece", this.state.currentPlayingPiece, halfPiece)
                 this.setState({ currentPlayingPiece: null });
             }
